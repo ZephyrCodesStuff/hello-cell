@@ -15,7 +15,7 @@ An experimental research prototype and proof-of-concept demonstrating modern, na
 - [x] **Kernel Bootstrap**: Linker script (`ps3.ld`) constructing the LV2 kernel 24-byte `_start` OPD descriptor (`[PC, TOC, ENV]`) and enforcing 64 KB segment alignment (`PHDRS`).
 - [x] **Dynamic Memory (`alloc`)**: O(1) heap allocation powered by **Talc 5.1** implementing a dynamic `Source` provider that fetches $\ge 4\text{ MB}$ chunks on demand from LV2 `sys_memory_allocate`.
 - [x] **Console TTY Output**: Formatted string printing (`print!`, `println!`) routed through `SYS_TTY_WRITE` (Syscall 403).
-- [x] **Kernel Syscall ABI**: Inline assembly wrappers managing 128-byte stack linkage frames and TOC register (`r2`) preservation.
+- [x] **Kernel Syscall ABI**: Centralized `raw_syscall` assembly primitive managing 128-byte stack linkage frames and TOC register (`r2`) preservation, backed by a declarative `define_syscalls!` macro DSL.
 - [ ] **SPRX Dynamic Linking / Networking (WIP)**: Experimental PSL1GHT FNID import tables (`src/sprx.s`) and post-link ELF patching (`sprxlinker.py`) for `cellSysmodule` and `sys_net`.
 
 ---
