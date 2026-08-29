@@ -18,6 +18,7 @@ use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
+use hdk_secure::cipher::{KeyIvInit, StreamCipher};
 
 #[no_mangle]
 pub extern "C" fn rust_main() -> i32 {
@@ -87,10 +88,17 @@ pub extern "C" fn rust_main() -> i32 {
 
     match unsafe { syscalls::sys_memory_get_user_memory_size() } {
         Ok((total, avail)) => {
-            println!(" [MEM] Total User Memory: {} MB, Available: {} MB", total / (1024 * 1024), avail / (1024 * 1024));
+            println!(
+                " [MEM] Total User Memory: {} MB, Available: {} MB",
+                total / (1024 * 1024),
+                avail / (1024 * 1024)
+            );
         }
         Err(ret) => {
-            println!(" [MEM] SYS_MEMORY_GET_USER_MEMORY_SIZE error: {:#X}", ret as u32);
+            println!(
+                " [MEM] SYS_MEMORY_GET_USER_MEMORY_SIZE error: {:#X}",
+                ret as u32
+            );
         }
     }
 
@@ -104,6 +112,30 @@ pub extern "C" fn rust_main() -> i32 {
             0
         }
     };
+
+    // debug: run some roundtrip encryption routine to test the secure module
+    let mut data: [u8; 25] = *b"Hello, PS3 Secure Module!";
+
+    let mut hasher = sha1_smol::Sha1::new();
+    hasher.update(&data);
+    let digest = hasher.digest().bytes();
+
+    let iv: [u8; 8] = digest[..8].try_into().unwrap();
+    println!("IV (from SHA-1): {:02x?}", iv);
+
+    let key = [
+        0x80, 0x6d, 0x79, 0x16, 0x23, 0x42, 0xa1, 0x0e, 0x8f, 0x78, 0x14, 0xd4, 0xf9, 0x94, 0xa2,
+        0xd1, 0x74, 0x13, 0xfc, 0xa8, 0xf6, 0xe0, 0xb8, 0xa4, 0xed, 0xb9, 0xdc, 0x32, 0x7f, 0x8b,
+        0xa7, 0x11,
+    ];
+
+    let mut cipher = hdk_secure::modes::BlowfishPS3::new(&key.into(), &iv.into());
+    cipher.apply_keystream(&mut data);
+    println!("Encrypted data: {:02x?}", data);
+
+    let mut cipher = hdk_secure::modes::BlowfishPS3::new(&key.into(), &iv.into());
+    cipher.apply_keystream(&mut data);
+    println!("Decrypted data: {}", String::from_utf8_lossy(&data));
 
     let candidate_paths = [
         "/dev_flash/sys/external/libsysmodule.sprx",

@@ -12,6 +12,10 @@ path = "src/lib.rs"
 talc = { version = "5.1", default-features = false, features = ["counters"] }
 lock_api = { version = "0.4", default-features = false }
 
+# debug
+hdk-secure = { git = "https://github.com/ZephyrCodesStuff/hdk-rs.git", default-features = false }
+sha1_smol = "1.0.1"
+
 [profile.dev]
 codegen-units = 1
 panic = "abort"
