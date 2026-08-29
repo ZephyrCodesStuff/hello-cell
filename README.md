@@ -106,4 +106,4 @@ PS3 LV2 kernel syscalls (`sc 2`) expect a minimum 112-byte ABI linkage stack fra
 
 ## License
 
-MIT / Apache-2.0
+AGPLv3.0
