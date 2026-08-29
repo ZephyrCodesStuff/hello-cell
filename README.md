@@ -7,7 +7,7 @@ A minimal, working, barebones starting point for developing PlayStation 3 homebr
 ## Features
 
 - **PPC64 ELFv1 ABI**: Built for PS3's native 64-bit PowerPC architecture with `.opd` function descriptors and stable `.TOC.` base addressing.
-- **Dynamic Memory Allocation (`alloc`)**: Working `GlobalAlloc` implementation backed by PS3 LV2 `sys_memory_allocate` (64 KB pages). Enables `Box`, `Vec`, `String`, `format!`, and `BTreeMap`.
+- **Dynamic Memory Allocation & Recycling (`alloc`)**: Powered by **Talc 5** with O(1) allocation and automatic deallocation/recycling, backed by dynamic kernel heap expansion via PS3 LV2 `sys_memory_allocate` (64 KB pages).
 - **TTY Debug Output**: Standard `print!` and `println!` macros routed directly to the ProDG / TTY debug console via `SYS_TTY_WRITE`.
 - **Safe LV2 Syscalls**: Inline assembly wrappers for PS3 Level 2 kernel syscalls with stack frame management and TOC (`r2`) register preservation.
 - **Automated Toolchain**: PowerShell script (`build.ps1`) managing `cargo build`, cross-linking with PSL1GHT binutils in WSL, symbol stripping, and `make_fself` packaging.

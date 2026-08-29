@@ -1,9 +1,10 @@
 $ErrorActionPreference = "Stop"
 
-$WSL_DISTRO   = "archlinux"
-$PSL1GHT_LD  = "/home/zeph/Coding/ps3dev/ppu/bin/powerpc64-ps3-elf-ld"
-$PSL1GHT_STRIP = "/home/zeph/Coding/ps3dev/ppu/bin/powerpc64-ps3-elf-strip"
-$BUILD       = "target/powerpc-unknown-cellos/debug"
+$WSL_DISTRO    = if ($env:WSL_DISTRO) { $env:WSL_DISTRO } else { "archlinux" }
+$PS3DEV        = if ($env:PS3DEV) { $env:PS3DEV } else { "/home/zeph/Coding/ps3dev" }
+$PSL1GHT_LD    = "$PS3DEV/ppu/bin/powerpc64-ps3-elf-ld"
+$PSL1GHT_STRIP = "$PS3DEV/ppu/bin/powerpc64-ps3-elf-strip"
+$BUILD         = "target/powerpc-unknown-cellos/debug"
 
 # Translate a Windows path to its WSL mount path (e.g. C:\foo -> /mnt/c/foo)
 function WinToWsl($path) {
