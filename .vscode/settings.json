@@ -1,9 +1,18 @@
 {
-    "rust-analyzer.cargo.target": "powerpc-unknown-cellos.json",
+    "rust-analyzer.cargo.extraEnv": {
+        "RUSTUP_TOOLCHAIN": "nightly"
+    },
+    "rust-analyzer.server.extraEnv": {
+        "RUSTUP_TOOLCHAIN": "nightly"
+    },
+    "rust-analyzer.cargo.toolchain": "nightly",
+    "rust-analyzer.check.allTargets": false,
     "rust-analyzer.cargo.extraArgs": [
         "-Z",
-        "build-std=core,alloc,compiler_builtins"
+        "json-target-spec"
     ],
-    "rust-analyzer.cargo.allTargets": false,
-    "rust-analyzer.check.allTargets": false
+    "rust-analyzer.check.extraArgs": [
+        "-Z",
+        "json-target-spec"
+    ]
 }

@@ -1,2 +1,9 @@
+[build]
+target = "powerpc-unknown-cellos.json"
+
+[unstable]
+build-std = ["core", "alloc", "compiler_builtins"]
+json-target-spec = true
+
 [target.powerpc-unknown-cellos]
 rustflags = ["-C", "dwarf-version=2"]

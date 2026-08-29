@@ -85,25 +85,11 @@ pub extern "C" fn rust_main() -> i32 {
     println!("----------------------------------------");
     println!(" Probing PS3 Memory & PRX Subsystem...");
 
-    let mut mem_info: [u32; 2] = [0, 0];
-    unsafe {
-        let mut _saved_r2: u64;
-        let ret: i32;
-        core::arch::asm!(
-            "mr 22, 2",
-            "stdu 1, -128(1)",
-            "sc",
-            "addi 1, 1, 128",
-            "mr 2, 22",
-            out("r22") _saved_r2,
-            in("r11") 352u64,         // SYS_MEMORY_GET_USER_MEMORY_SIZE
-            in("r3") (&mut mem_info as *mut [u32; 2]) as usize as u64,
-            lateout("r3") ret,
-            clobber_abi("C"),
-        );
-        if ret == 0 {
-            println!(" [MEM] Total User Memory: {} MB, Available: {} MB", mem_info[0] / (1024 * 1024), mem_info[1] / (1024 * 1024));
-        } else {
+    match unsafe { syscalls::sys_memory_get_user_memory_size() } {
+        Ok((total, avail)) => {
+            println!(" [MEM] Total User Memory: {} MB, Available: {} MB", total / (1024 * 1024), avail / (1024 * 1024));
+        }
+        Err(ret) => {
             println!(" [MEM] SYS_MEMORY_GET_USER_MEMORY_SIZE error: {:#X}", ret as u32);
         }
     }
