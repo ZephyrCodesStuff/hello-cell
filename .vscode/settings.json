@@ -1,0 +1,9 @@
+{
+    "rust-analyzer.cargo.target": "powerpc-unknown-cellos.json",
+    "rust-analyzer.cargo.extraArgs": [
+        "-Z",
+        "build-std=core,alloc,compiler_builtins"
+    ],
+    "rust-analyzer.cargo.allTargets": false,
+    "rust-analyzer.check.allTargets": false
+}

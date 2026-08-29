@@ -1,0 +1,2 @@
+[target.powerpc-unknown-cellos]
+rustflags = ["-C", "dwarf-version=2"]
