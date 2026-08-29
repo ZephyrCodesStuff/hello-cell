@@ -11,18 +11,18 @@ pub fn _print_str(s: &str) {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => {
+    ($($arg:tt)*) => {{
         $crate::io::_print_str(alloc::format!($($arg)*).as_str())
-    };
+    }};
 }
 
 #[macro_export]
 macro_rules! println {
-    () => {
+    () => {{
         $crate::io::_print_str("\n")
-    };
-    ($($arg:tt)*) => {
+    }};
+    ($($arg:tt)*) => {{
         $crate::io::_print_str(alloc::format!($($arg)*).as_str());
         $crate::io::_print_str("\n");
-    };
+    }};
 }
