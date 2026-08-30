@@ -101,7 +101,7 @@ pub extern "C" fn rust_main() -> i32 {
         }
     }
 
-    // Test SPRX Dynamic Stubs via PSL1GHT cellSysmodule & sys_net
+    // Test SPRX Dynamic Stubs via cellSysmodule & sys_net
     println!(" [NET] Initializing PS3 Network Subsystem via SPRX Stubs...");
     if let Err(e) = net::init() {
         println!(" [NET] Network init returned error: {:#X}", e as u32);

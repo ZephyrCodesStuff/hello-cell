@@ -1,1 +1,7 @@
 /target
+
+# moldier will generate this based on the libraries we need
+src/sprx.s
+
+# copy this from `sprx.example.toml`
+sprx.toml

@@ -1,0 +1,37 @@
+# PlayStation 3 SPRX Import Definitions
+# Defines libraries, function exports, and their 32-bit FNIDs for automated assembly and linker binding.
+
+[libraries.cellSysmodule]
+module_id = 0x0009
+functions = [
+    { name = "sysModuleLoad", fnid = 0x32267A31 },
+    { name = "sysModuleUnload", fnid = 0x112A5EE9 },
+    { name = "sysModuleIsLoaded", fnid = 0x5a59e258 },
+]
+
+[libraries.sys_net]
+module_id = 0x0009
+functions = [
+    { name = "netInitializeNetworkEx", fnid = 0x139a9e9b },
+    { name = "netFinalizeNetwork", fnid = 0xb68d5625 },
+    { name = "netSocket", fnid = 0x9c056962 },
+    { name = "netConnect", fnid = 0x64f66d35 },
+    { name = "netBind", fnid = 0xb0a59804 },
+    { name = "netListen", fnid = 0x28e208bb },
+    { name = "netAccept", fnid = 0xc94f6939 },
+    { name = "netSend", fnid = 0xdc751b40 },
+    { name = "netSendTo", fnid = 0x9647570b },
+    { name = "netRecv", fnid = 0xfba04f37 },
+    { name = "netRecvFrom", fnid = 0x1f953b9f },
+    { name = "netShutdown", fnid = 0xa50777c6 },
+    { name = "netClose", fnid = 0x6db6e8cd },
+]
+
+[libraries.cellNetCtl]
+module_id = 0x0009
+functions = [
+    { name = "cellNetCtlInit", fnid = 0xBD5A59FC },
+    { name = "cellNetCtlTerm", fnid = 0x105EE2CB },
+    { name = "cellNetCtlGetState", fnid = 0x8B3EBA69 },
+    { name = "cellNetCtlGetInfo", fnid = 0x1E585B5D },
+]

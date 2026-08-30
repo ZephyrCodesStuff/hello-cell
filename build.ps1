@@ -1,10 +1,6 @@
 $ErrorActionPreference = "Stop"
 
 $WSL_DISTRO    = if ($env:WSL_DISTRO) { $env:WSL_DISTRO } else { "archlinux" }
-$PS3DEV        = if ($env:PS3DEV) { $env:PS3DEV } else { "/home/zeph/Coding/ps3dev" }
-$PSL1GHT_AS    = "$PS3DEV/ppu/bin/powerpc64-ps3-elf-as"
-$PSL1GHT_LD    = "$PS3DEV/ppu/bin/powerpc64-ps3-elf-ld"
-$PSL1GHT_STRIP = "$PS3DEV/ppu/bin/powerpc64-ps3-elf-strip"
 $BUILD         = "target/powerpc-unknown-cellos/debug"
 
 # Translate a Windows path to its WSL mount path (e.g. C:\foo -> /mnt/c/foo)
@@ -20,11 +16,15 @@ $HOST_TARGET = (rustc -vV | Select-String "host: " | ForEach-Object { $_.Line.Su
 cargo build -p moldier --target $HOST_TARGET
 if ($LASTEXITCODE -ne 0) { throw "moldier build failed" }
 
-# 2. Build the Rust staticlib (ELFv1 PPC64 BE).
+# 2. Auto-generate SPRX assembly stubs from declarative sprx.toml.
+cargo run -p moldier --target $HOST_TARGET -- gen-stubs --config sprx.toml --output src/sprx.s
+if ($LASTEXITCODE -ne 0) { throw "SPRX stub generation failed" }
+
+# 3. Build the Rust staticlib (ELFv1 PPC64 BE).
 cargo +nightly build --target powerpc-unknown-cellos.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec -p hello-cell
 if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 
-# 3. Link with mold (ultra-fast PPC64 ELFv1 linker).
+# 4. Link with mold (ultra-fast PPC64 ELFv1 linker).
 $W_BUILD = WinToWsl((Resolve-Path $BUILD))
 $W_OUT   = "$W_BUILD/EBOOT.ELF"
 
@@ -35,17 +35,23 @@ if (Get-Command "mold" -ErrorAction SilentlyContinue) {
 }
 if ($LASTEXITCODE -ne 0) { throw "mold link failed" }
 
-# 4. Process ELF with moldier (packs Sony LV2 OPD descriptors, patches SPRX FNID counts, verifies ELF layout).
+# 5. Process ELF with moldier (packs Sony LV2 OPD descriptors, dynamically binds SPRX headers, verifies ELF layout).
 cargo run -p moldier --target $HOST_TARGET -- patch "$BUILD\EBOOT.ELF"
 if ($LASTEXITCODE -ne 0) { throw "moldier patch failed" }
 
-# 5. Package the ELF into an EBOOT.BIN.
-$BIN_PATH = "$BUILD\EBOOT.BIN"
+# 6. Package the ELF into an EBOOT.BIN.
+$ABS_ELF = (Resolve-Path "$BUILD\EBOOT.ELF").Path
+$ABS_BIN = "$((Resolve-Path $BUILD).Path)\EBOOT.BIN"
 
 if (Get-Command "make_fself.exe" -ErrorAction SilentlyContinue) {
-    make_fself.exe "$BUILD\EBOOT.ELF" $BIN_PATH
+    make_fself.exe $ABS_ELF $ABS_BIN
 } elseif (Get-Command "make_fself" -ErrorAction SilentlyContinue) {
-    make_fself "$BUILD/EBOOT.ELF" $BIN_PATH
+    make_fself "$BUILD/EBOOT.ELF" "$BUILD/EBOOT.BIN"
 }
 
+# Copy finalized binaries to project root
+Copy-Item "$BUILD\EBOOT.ELF" "EBOOT.ELF" -Force
+Copy-Item "$BUILD\EBOOT.BIN" "EBOOT.BIN" -Force
+
 Write-Host "Build complete with mold + moldier: $BIN_PATH"
+

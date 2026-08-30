@@ -1,6 +1,6 @@
 //! PlayStation 3 Networking Library & Sockets
 //!
-//! Implements native networking using PSL1GHT-compatible FNID dynamic linking.
+//! Implements native networking using FNID dynamic linking.
 
 use alloc::alloc::{alloc, dealloc};
 use core::alloc::Layout;
@@ -88,9 +88,23 @@ extern "C" {
     pub fn netListen(socket: i32, backlog: i32) -> i32;
     pub fn netAccept(socket: i32, addr: *mut SockAddr, addrlen: *mut u32) -> i32;
     pub fn netSend(socket: i32, buf: *const u8, len: usize, flags: i32) -> isize;
-    pub fn netSendTo(socket: i32, buf: *const u8, len: usize, flags: i32, dest_addr: *const SockAddr, dest_len: u32) -> isize;
+    pub fn netSendTo(
+        socket: i32,
+        buf: *const u8,
+        len: usize,
+        flags: i32,
+        dest_addr: *const SockAddr,
+        dest_len: u32,
+    ) -> isize;
     pub fn netRecv(socket: i32, buf: *mut u8, len: usize, flags: i32) -> isize;
-    pub fn netRecvFrom(socket: i32, buf: *mut u8, len: usize, flags: i32, from_addr: *mut SockAddr, from_len: *mut u32) -> isize;
+    pub fn netRecvFrom(
+        socket: i32,
+        buf: *mut u8,
+        len: usize,
+        flags: i32,
+        from_addr: *mut SockAddr,
+        from_len: *mut u32,
+    ) -> isize;
     pub fn netShutdown(socket: i32, how: i32) -> i32;
     pub fn netClose(socket: i32) -> i32;
 
@@ -116,7 +130,9 @@ pub fn init() -> Result<(), i32> {
         // 1. Load sys_net.sprx module
         crate::println!(" [NET] Loading CELL_SYSMODULE_NET (0x0000)...");
         let res = sysModuleLoad(SYSMODULE_NET);
-        if res < 0 && res != -0x7FFEDFFF /* 0x80012001: SYSMODULE_ERR_DUPLICATE */ {
+        if res < 0 && res != -0x7FFEDFFF
+        /* 0x80012001: SYSMODULE_ERR_DUPLICATE */
+        {
             return Err(res);
         }
 
@@ -161,7 +177,12 @@ pub fn init() -> Result<(), i32> {
         let mut state = -1i32;
         for i in 0..15 {
             let s_res = cellNetCtlGetState(&mut state);
-            crate::println!(" [NET] [poll {}] cellNetCtlGetState -> res: {:#X}, state: {}", i, s_res as u32, state);
+            crate::println!(
+                " [NET] [poll {}] cellNetCtlGetState -> res: {:#X}, state: {}",
+                i,
+                s_res as u32,
+                state
+            );
             if s_res == 0 && state == CELL_NET_CTL_STATE_IPOBTAINED {
                 crate::println!(" [NET] Network connection active (State=IPObtained)!");
                 break;
@@ -225,7 +246,9 @@ impl UdpSocket {
         };
 
         if res < 0 {
-            unsafe { netClose(fd); }
+            unsafe {
+                netClose(fd);
+            }
             return Err(res);
         }
 
@@ -285,7 +308,9 @@ impl TcpStream {
         };
 
         if res < 0 {
-            unsafe { netClose(fd); }
+            unsafe {
+                netClose(fd);
+            }
             return Err(res);
         }
 
@@ -331,7 +356,10 @@ impl TcpListener {
     pub fn bind(ip: [u8; 4], port: u16) -> Result<Self, i32> {
         let fd = unsafe { netSocket(AF_INET as i32, SOCK_STREAM, 0) };
         if fd < 0 {
-            crate::println!(" [NET] netSocket(AF_INET=2, SOCK_STREAM=1, proto=0) failed: {:#X}", fd as u32);
+            crate::println!(
+                " [NET] netSocket(AF_INET=2, SOCK_STREAM=1, proto=0) failed: {:#X}",
+                fd as u32
+            );
             return Err(fd);
         }
 
@@ -346,14 +374,18 @@ impl TcpListener {
 
         if res < 0 {
             crate::println!(" [NET] netBind failed on port {}: {:#X}", port, res as u32);
-            unsafe { netClose(fd); }
+            unsafe {
+                netClose(fd);
+            }
             return Err(res);
         }
 
         let listen_res = unsafe { netListen(fd, 8) };
         if listen_res < 0 {
             crate::println!(" [NET] netListen failed: {:#X}", listen_res as u32);
-            unsafe { netClose(fd); }
+            unsafe {
+                netClose(fd);
+            }
             return Err(listen_res);
         }
 
