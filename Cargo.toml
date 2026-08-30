@@ -1,3 +1,6 @@
+[workspace]
+members = [".", "moldier"]
+
 [package]
 name = "hello-cell"
 version = "0.1.0"

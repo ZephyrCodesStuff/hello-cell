@@ -15,34 +15,36 @@ function WinToWsl($path) {
     return "/mnt/$drive$rest"
 }
 
-# 1. Build the Rust staticlib (ELFv1 PPC64 BE).
-cargo +nightly build --target powerpc-unknown-cellos.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec
+# 1. Build the moldier patcher tool (Host target).
+cargo build -p moldier
+if ($LASTEXITCODE -ne 0) { throw "moldier build failed" }
+
+# 2. Build the Rust staticlib (ELFv1 PPC64 BE).
+cargo +nightly build --target powerpc-unknown-cellos.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec -p hello-cell
 if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 
-# 2. Assemble SPRX FNID stubs and link inside WSL with PSL1GHT linker.
+# 3. Link with mold (ultra-fast PPC64 ELFv1 linker).
 $W_BUILD = WinToWsl((Resolve-Path $BUILD))
-$W_LD    = WinToWsl((Resolve-Path "ps3.ld"))
-$W_SPRX  = WinToWsl((Resolve-Path "src/sprx.s"))
 $W_OUT   = "$W_BUILD/EBOOT.ELF"
 
-wsl -d $WSL_DISTRO -e bash -lc "$PSL1GHT_AS -mregnames $W_SPRX -o $W_BUILD/sprx.o"
-if ($LASTEXITCODE -ne 0) { throw "sprx assembly failed" }
+if (Get-Command "mold" -ErrorAction SilentlyContinue) {
+    mold -m elf64ppc --image-base 0x10000 -Bstatic -e _start_code --whole-archive "$BUILD/libhello_cell.a" --no-whole-archive -o "$BUILD/EBOOT.ELF"
+} else {
+    wsl -d $WSL_DISTRO -e bash -lc "mold -m elf64ppc --image-base 0x10000 -Bstatic -e _start_code --whole-archive $W_BUILD/libhello_cell.a --no-whole-archive -o $W_OUT"
+}
+if ($LASTEXITCODE -ne 0) { throw "mold link failed" }
 
-wsl -d $WSL_DISTRO -e bash -lc "$PSL1GHT_LD -m elf64ppc -T $W_LD -o $W_OUT $W_BUILD/sprx.o -L$W_BUILD --whole-archive $W_BUILD/libhello_cell.a --no-whole-archive"
-if ($LASTEXITCODE -ne 0) { throw "link failed" }
-
-# 3. Strip debug symbols for clean ProDG execution.
-wsl -d $WSL_DISTRO -e bash -lc "$PSL1GHT_STRIP -g $W_OUT"
-if ($LASTEXITCODE -ne 0) { throw "strip failed" }
-
-# 4. Process ELF with PSL1GHT-compatible sprxlinker (sets OSABI, verifies FNID imports, packs OPD descriptors).
-python sprxlinker.py "$BUILD\EBOOT.ELF"
-if ($LASTEXITCODE -ne 0) { throw "sprxlinker failed" }
+# 4. Process ELF with moldier (packs Sony LV2 OPD descriptors, patches SPRX FNID counts, verifies ELF layout).
+cargo run -p moldier -- patch "$BUILD\EBOOT.ELF"
+if ($LASTEXITCODE -ne 0) { throw "moldier patch failed" }
 
 # 5. Package the ELF into an EBOOT.BIN.
 $BIN_PATH = "$BUILD\EBOOT.BIN"
 
-make_fself.exe "$BUILD\EBOOT.ELF" $BIN_PATH
-if ($LASTEXITCODE -ne 0) { throw "make_fself failed" }
+if (Get-Command "make_fself.exe" -ErrorAction SilentlyContinue) {
+    make_fself.exe "$BUILD\EBOOT.ELF" $BIN_PATH
+} elseif (Get-Command "make_fself" -ErrorAction SilentlyContinue) {
+    make_fself "$BUILD/EBOOT.ELF" $BIN_PATH
+}
 
-Write-Host "Build complete with PSL1GHT FNID networking: $BIN_PATH"
+Write-Host "Build complete with mold + moldier: $BIN_PATH"

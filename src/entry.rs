@@ -13,7 +13,7 @@ global_asm!(
 _start_code:
     # 1. Kernel loads r2 = .TOC. from _start descriptor
     # 2. Call rust_main using standard ELFv1 ABI
-    bl      .rust_main
+    bl      rust_main
     nop
 
     # 3. Terminate process via LV2 Syscall 3 (SYS_PROCESS_EXIT)
@@ -25,3 +25,6 @@ _start_code:
     b       .halt
     "#
 );
+
+global_asm!(include_str!("sprx.s"));
+

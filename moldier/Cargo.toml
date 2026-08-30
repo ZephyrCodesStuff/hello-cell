@@ -1,0 +1,11 @@
+[package]
+name = "moldier"
+version = "0.1.0"
+edition = "2021"
+description = "PlayStation 3 ELF post-linker and patcher for mold"
+
+[[bin]]
+name = "moldier"
+path = "src/main.rs"
+
+[dependencies]
