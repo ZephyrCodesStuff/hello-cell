@@ -46,6 +46,9 @@ cellSysmodule_name:
 .globl sys_net_name
 sys_net_name:
     .asciz "sys_net"
+.globl cellNetCtl_name
+cellNetCtl_name:
+    .asciz "cellNetCtl"
 
 # -----------------------------------------------------------------------------
 # FNID Hash Tables
@@ -75,66 +78,90 @@ sys_net_fnid_table:
     .int 0xa50777c6   # netShutdown
     .int 0x6db6e8cd   # netClose
 
+.globl cellNetCtl_fnid_table
+cellNetCtl_fnid_table:
+    .int 0xBD5A59FC   # cellNetCtlInit
+    .int 0x105EE2CB   # cellNetCtlTerm
+    .int 0x8B3EBA69   # cellNetCtlGetState
+    .int 0x1E585B5D   # cellNetCtlGetInfo
+
 # -----------------------------------------------------------------------------
-# Function Pointer Slots (In .data.sceFStub: initialized to trampoline OPDs)
+# Function Pointer Slots (In .data.sceFStub: 32-bit pointer slots populated by LV2 PRX loader)
 # -----------------------------------------------------------------------------
 .section ".data.sceFStub.cellSysmodule","aw"
-.align 3
+.align 2
 .globl cellSysmodule_fstub_table
 cellSysmodule_fstub_table:
 .globl sysModuleLoad_stub
 sysModuleLoad_stub:
-    .quad __sysModuleLoad
+    .int 0
 .globl sysModuleUnload_stub
 sysModuleUnload_stub:
-    .quad __sysModuleUnload
+    .int 0
 .globl sysModuleIsLoaded_stub
 sysModuleIsLoaded_stub:
-    .quad __sysModuleIsLoaded
+    .int 0
 
 .section ".data.sceFStub.sys_net","aw"
-.align 3
+.align 2
 .globl sys_net_fstub_table
 sys_net_fstub_table:
 .globl netInitializeNetworkEx_stub
 netInitializeNetworkEx_stub:
-    .quad __netInitializeNetworkEx
+    .int 0
 .globl netFinalizeNetwork_stub
 netFinalizeNetwork_stub:
-    .quad __netFinalizeNetwork
+    .int 0
 .globl netSocket_stub
 netSocket_stub:
-    .quad __netSocket
+    .int 0
 .globl netConnect_stub
 netConnect_stub:
-    .quad __netConnect
+    .int 0
 .globl netBind_stub
 netBind_stub:
-    .quad __netBind
+    .int 0
 .globl netListen_stub
 netListen_stub:
-    .quad __netListen
+    .int 0
 .globl netAccept_stub
 netAccept_stub:
-    .quad __netAccept
+    .int 0
 .globl netSend_stub
 netSend_stub:
-    .quad __netSend
+    .int 0
 .globl netSendTo_stub
 netSendTo_stub:
-    .quad __netSendTo
+    .int 0
 .globl netRecv_stub
 netRecv_stub:
-    .quad __netRecv
+    .int 0
 .globl netRecvFrom_stub
 netRecvFrom_stub:
-    .quad __netRecvFrom
+    .int 0
 .globl netShutdown_stub
 netShutdown_stub:
-    .quad __netShutdown
+    .int 0
 .globl netClose_stub
 netClose_stub:
-    .quad __netClose
+    .int 0
+
+.section ".data.sceFStub.cellNetCtl","aw"
+.align 2
+.globl cellNetCtl_fstub_table
+cellNetCtl_fstub_table:
+.globl cellNetCtlInit_stub
+cellNetCtlInit_stub:
+    .int 0
+.globl cellNetCtlTerm_stub
+cellNetCtlTerm_stub:
+    .int 0
+.globl cellNetCtlGetState_stub
+cellNetCtlGetState_stub:
+    .int 0
+.globl cellNetCtlGetInfo_stub
+cellNetCtlGetInfo_stub:
+    .int 0
 
 # -----------------------------------------------------------------------------
 # PRX Import Headers (Read by PS3 LV2 Kernel Loader - patched by moldier)
@@ -164,6 +191,17 @@ sys_net_prx_header:
     .int 0            # sys_net_fstub_table (patched by moldier)
     .int 0, 0, 0, 0
 
+.globl cellNetCtl_prx_header
+cellNetCtl_prx_header:
+    .int 0x2c000001
+    .short 0x0009
+    .short 0          # num_imports (patched by moldier)
+    .int 0, 0
+    .int 0            # cellNetCtl_name (patched by moldier)
+    .int 0            # cellNetCtl_fnid_table (patched by moldier)
+    .int 0            # cellNetCtl_fstub_table (patched by moldier)
+    .int 0, 0, 0, 0
+
 # -----------------------------------------------------------------------------
 # Trampoline Functions & ELFv1 OPD Descriptors
 # -----------------------------------------------------------------------------
@@ -172,15 +210,16 @@ sys_net_prx_header:
 
 .macro DEFINE_STUB name
 .align 2
-.globl __\name
-__\name:
+.globl \name
+.type \name, @function
+\name:
     mflr    0
     std     0, 16(1)
     std     2, 40(1)
     stdu    1, -128(1)
     addis   12, 2, \name\()_stub@toc@ha
     addi    12, 12, \name\()_stub@toc@l
-    ld      12, 0(12)                   # Load pointer to runtime descriptor
+    lwz     12, 0(12)                 # Load 32-bit pointer to runtime descriptor
     lwz     0, 0(12)                  # Load resolved function entry address
     lwz     2, 4(12)                  # Load resolved SPRX TOC base
     mtctr   0
@@ -190,13 +229,6 @@ __\name:
     ld      0, 16(1)
     mtlr    0
     blr
-
-.section ".opd","aw"
-.align 3
-.globl \name
-\name:
-    .quad __\name, .TOC., 0
-.section ".sceStub.text","ax"
 .endm
 
 # cellSysmodule stubs
@@ -218,3 +250,9 @@ DEFINE_STUB netRecv
 DEFINE_STUB netRecvFrom
 DEFINE_STUB netShutdown
 DEFINE_STUB netClose
+
+# cellNetCtl stubs
+DEFINE_STUB cellNetCtlInit
+DEFINE_STUB cellNetCtlTerm
+DEFINE_STUB cellNetCtlGetState
+DEFINE_STUB cellNetCtlGetInfo

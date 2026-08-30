@@ -295,9 +295,10 @@ impl ElfPatcher {
         println!("[moldier] Found .lib.stub ({} entries, offset 0x{:X})", stub_count, stub_sec.offset);
 
         // Auto-resolve library pointers from symbol table
-        let known_libs: [(&str, &str, &str, &str, u16); 2] = [
+        let known_libs: [(&str, &str, &str, &str, u16); 3] = [
             ("cellSysmodule", "cellSysmodule_name", "cellSysmodule_fnid_table", "cellSysmodule_fstub_table", 3),
             ("sys_net", "sys_net_name", "sys_net_fnid_table", "sys_net_fstub_table", 13),
+            ("cellNetCtl", "cellNetCtl_name", "cellNetCtl_fnid_table", "cellNetCtl_fstub_table", 4),
         ];
 
         for i in 0..stub_count {
