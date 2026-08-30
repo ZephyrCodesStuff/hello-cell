@@ -1,129 +1,138 @@
 # hello-cell: Bare-Metal Rust on PlayStation 3 (Cell B.E.)
 
-An experimental research prototype and proof-of-concept demonstrating modern, native `#![no_std]` **Rust** executing directly on the **PlayStation 3's Cell Broadband Engine (PPE)** under the GameOS LV2 kernel.
+A modern `#![no_std]` **Rust** runtime and application environment executing directly on the **PlayStation 3's Cell Broadband Engine (PPE)** under the GameOS LV2 kernel.
+
+Includes dynamic heap allocation (`alloc`), high-performance native ELF linking via **`mold`**, declarative SPRX dynamic linking (`sprx.toml`), and a native **HTTP server** over PS3 sockets.
 
 ---
 
-> [!NOTE]
-> This is a **research and experimental prototype** exploring ABI translation, kernel syscall boundaries, Talc dynamic memory allocation, and PSL1GHT SPRX linking for the PS3 PPE. It is not yet a complete standard library (`std`).
+## Quickstart: Build & Run in 60 Seconds
 
----
-
-## Current Status & What Works
-
-- [x] **PPC64 ELFv1 ABI**: Custom target JSON (`powerpc-unknown-cellos.json`) generating 64-bit Big-Endian PowerPC code with stable `.TOC.` addressing.
-- [x] **Kernel Bootstrap**: Linker script (`ps3.ld`) constructing the LV2 kernel 24-byte `_start` OPD descriptor (`[PC, TOC, ENV]`) and enforcing 64 KB segment alignment (`PHDRS`).
-- [x] **Dynamic Memory (`alloc`)**: O(1) heap allocation powered by **Talc 5.1** implementing a dynamic `Source` provider that fetches $\ge 4\text{ MB}$ chunks on demand from LV2 `sys_memory_allocate`.
-- [x] **Console TTY Output**: Formatted string printing (`print!`, `println!`) routed through `SYS_TTY_WRITE` (Syscall 403).
-- [x] **Kernel Syscall ABI**: Centralized `raw_syscall` assembly primitive managing 128-byte stack linkage frames and TOC register (`r2`) preservation, backed by a declarative `define_syscalls!` macro DSL.
-- [ ] **SPRX Dynamic Linking / Networking (WIP)**: Experimental PSL1GHT FNID import tables (`src/sprx.s`) and post-link ELF patching (`sprxlinker.py`) for `cellSysmodule` and `sys_net`.
-
----
-
-## Project Structure
-
-```
-hello-cell/
-├── .cargo/
-│   └── config.toml          # Target rustflags (-C dwarf-version=2)
-├── src/
-│   ├── lib.rs               # Crate root and rust_main application logic
-│   ├── entry.rs             # _start_code PowerPC64 ELFv1 bootstrap entry point
-│   ├── syscalls.rs          # PS3 LV2 kernel syscalls (TTY, Memory, Timer, PRX, Exit)
-│   ├── allocator.rs         # Talc 5.1 dynamic Source allocator & Ps3RawMutex
-│   ├── io.rs                # print! and println! macros over TTY
-│   ├── mem.rs               # C runtime intrinsics (memcpy, memset, memcmp, memmove, strlen)
-│   ├── net.rs               # Experimental socket abstractions & sys_net wrappers
-│   ├── panic.rs             # Custom panic handler reporting to TTY
-│   └── sprx.s               # SPRX parameters, FNID lookup tables, and OPD stubs
-├── powerpc-unknown-cellos.json  # Custom Rust target specification (PPC64 BE ELFv1)
-├── ps3.ld                   # GNU LD linker script with 64KB page alignment & .opd layout
-├── sprxlinker.py            # ELF post-processor for PSL1GHT PRX structures
-├── build.ps1                # Build, assemble, link, strip, and packaging pipeline
-└── Cargo.toml               # Cargo package configuration
-```
-
----
-
-## Prerequisites
-
+### Requirements
 1. **Rust Nightly**:
    ```powershell
    rustup toolchain install nightly
    rustup component add rust-src --toolchain nightly
    ```
-2. **PSL1GHT / PS3 Binutils** in WSL (Arch Linux or Ubuntu):
-   - `powerpc64-ps3-elf-as`
-   - `powerpc64-ps3-elf-ld` (GNU Binutils 2.22+)
-   - `powerpc64-ps3-elf-strip`
-3. **Python 3** (for `sprxlinker.py` ELF post-processing).
-4. **`make_fself.exe`** from the PS3 SDK in PATH (or workspace root).
+2. **`mold` Linker**: Installed and available in your `PATH` ([mold releases](https://github.com/rui314/mold/releases)).
+3. **`make_fself.exe`**: Available in your `PATH` (from the PS3 SDK tools).
+
+### Building Your First Binary
+Run the automated build script:
+```powershell
+.\build.ps1
+```
+
+This generates `EBOOT.ELF` and `EBOOT.BIN` in the root folder in ~1.5 seconds.
+
+### Running & Testing
+- **RPCS3**: Drag and drop `EBOOT.BIN` or `EBOOT.ELF` directly onto RPCS3.
+- **PS3 Hardware (CFW / HEN / DEX)**: Deploy `EBOOT.BIN` to `/dev_hdd0/game/HELLOCELL/USRDIR/` or launch over network via OpenTM / ProDG.
+- **Test the HTTP Server**:
+  While running on hardware or RPCS3, open your browser or terminal and run:
+  ```powershell
+  curl http://<PS3_IP>:8080
+  ```
+  Response:
+  ```http
+  HTTP/1.1 200 OK
+  Content-Type: text/plain; charset=utf-8
+  Content-Length: 75
+  Server: PS3-CellOS-Rust/1.0
+
+  Hello, Cell!
+
+  Stats:
+  - Active Allocs: 4
+  - Active Bytes: 136 bytes
+  - Claimed Total: 4 MB
+  ```
 
 ---
 
-## Building
+## Features & Architecture
 
-Run the automated PowerShell build script:
+- **PPC64 ELFv1 ABI**: Custom target definition ([`powerpc-unknown-cellos.json`](powerpc-unknown-cellos.json)) generating 64-bit Big-Endian PowerPC machine code with compliant `.TOC.` (Table of Contents) addressing.
+- **Native Direct Linking via `mold`**: Standard `cargo build` links the binary directly using `mold` with no intermediate static archives or legacy linker scripts.
+- **Declarative SPRX Dynamic Linking ([`sprx.toml`](sprx.toml))**: Zero manual assembly needed to import PS3 system libraries (`cellSysmodule`, `sys_net`, `cellNetCtl`, etc.). Declare functions and FNIDs in TOML.
+- **`moldier` PS3 Toolchain Utility ([`moldier/`](moldier/))**: Built-in Rust tool that auto-generates assembly stubs and applies Sony LV2 kernel headers (`PT_SCE_PROC_PARAM`, `PT_SCE_PROC_PRX_PARAM`, and OPD descriptor packing).
+- **Dynamic Memory Allocation (`alloc`)**: O(1) heap allocation powered by **Talc 5.1**, dynamically claiming 4 MB chunks on demand from LV2 `sys_memory_allocate`.
+- **Embedded HTTP / TCP Socket Stack ([`src/net.rs`](src/net.rs))**: Native non-blocking and blocking TCP server support over GameOS `sys_net` and `cellNetCtl`.
+- **Console TTY Output ([`src/io.rs`](src/io.rs))**: Formatted `print!` and `println!` macros routed through `SYS_TTY_WRITE` (Syscall 403).
+- **Type-Safe Kernel Syscall DSL ([`src/syscalls.rs`](src/syscalls.rs))**: Centralized assembly wrapper managing 128-byte stack linkage frames and TOC register (`r2`) preservation.
+
+---
+
+## Project Layout
+
+```
+hello-cell/
+├── .cargo/
+│   └── config.toml          # Native mold linker flags and target configuration
+├── moldier/                 # Host tool: SPRX code generator and PS3 ELF patcher
+│   ├── Cargo.toml
+│   └── src/main.rs
+├── src/
+│   ├── main.rs              # Application entry point (rust_main) & HTTP server loop
+│   ├── entry.rs             # _start_code PowerPC64 ELFv1 bootstrap
+│   ├── syscalls.rs          # PS3 LV2 kernel syscall bindings
+│   ├── allocator.rs         # Talc 5.1 dynamic memory allocator & Mutex
+│   ├── net.rs               # PS3 TCP socket & network lifecycle abstractions
+│   ├── io.rs                # print! / println! TTY output
+│   ├── mem.rs               # C runtime intrinsics (memcpy, memset, memcmp, memmove)
+│   ├── panic.rs             # Custom panic handler reporting to TTY
+│   └── sprx.s               # Auto-generated assembly stubs (from sprx.toml)
+├── sprx.toml                # Declarative SPRX library & FNID import manifest
+├── powerpc-unknown-cellos.json  # PowerPC64 ELFv1 target specification
+├── build.ps1                # One-command build & packaging pipeline
+└── Cargo.toml               # Cargo package manifest
+```
+
+---
+
+## Adding PS3 System Libraries
+
+To call any PlayStation 3 SPRX function:
+
+1. Add the library name and function FNID to [`sprx.toml`](sprx.toml):
+   ```toml
+   [libraries.cellAudio]
+   module_id = 0x0009
+   functions = [
+       { name = "cellAudioInit", fnid = 0x8C090886 },
+       { name = "cellAudioQuit", fnid = 0x164C82FB },
+   ]
+   ```
+
+2. Declare the `extern "C"` signature in your Rust code:
+   ```rust
+   extern "C" {
+       pub fn cellAudioInit() -> i32;
+       pub fn cellAudioQuit() -> i32;
+   }
+   ```
+
+3. Run `.\build.ps1`. The stubs, trampolines, and PRX headers are generated and bound automatically.
+
+---
+
+## Manual Build Steps
+
+If you prefer running the build commands individually:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\build.ps1
+# 1. Generate SPRX assembly stubs from sprx.toml
+cargo run -p moldier -- gen-stubs --config sprx.toml --output src/sprx.s
+
+# 2. Build the ELF binary directly with mold
+cargo +nightly build --target powerpc-unknown-cellos.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec -p hello-cell
+
+# 3. Patch ELF with PS3 kernel headers and packed OPD descriptors
+cargo run -p moldier -- patch target/powerpc-unknown-cellos/debug/EBOOT.ELF
+
+# 4. Encrypt into signed EBOOT.BIN
+make_fself target/powerpc-unknown-cellos/debug/EBOOT.ELF EBOOT.BIN
 ```
-
-The pipeline performs the following steps:
-1. Compiles `core`, `alloc`, and `compiler_builtins` for `powerpc-unknown-cellos` via `cargo +nightly build`.
-2. Assembles SPRX FNID stubs (`src/sprx.s`) using `powerpc64-ps3-elf-as` in WSL.
-3. Links the static library with `powerpc64-ps3-elf-ld -T ps3.ld`.
-4. Strips debug symbols with `powerpc64-ps3-elf-strip -g`.
-5. Post-processes the ELF with `sprxlinker.py` to fix `.lib.stub` import counts and pack `.opd` descriptors.
-6. Packages `EBOOT.ELF` into `EBOOT.BIN` via `make_fself.exe`.
-
----
-
-## Running & Debugging
-
-- **Hardware (DEX / DECR)**: Launch via Target Manager / ProDG Debugger or open-source [OpenTM](https://github.com/sagemono/OpenTM) over Ethernet.
-- **RPCS3**: Boot `EBOOT.BIN` or `EBOOT.ELF` directly.
-
-Sample TTY output:
-```text
-========================================
- Hello PlayStation 3 from barebones Rust!
-========================================
-Boxed Value: 0x13374242
-Vector Items: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90]
-Vector Length: 10
-Formatted string dynamically: 0xCAFEBABE
-All allocations and formatting succeeded!
---- Heap Stats BEFORE Temp Allocations ---
-  Active Allocs: 2
-  Active Bytes:  56 bytes
-  Claimed Total: 4 MB
-Allocating a 64KB vector (8000 u64 elements)...
---- Heap Stats WHILE Vector is Live ---
-  Active Allocs: 3
-  Active Bytes:  64056 bytes (+64000)
-  Vector capacity in bytes: 64000
---- Heap Stats AFTER Vector Dropped (Deallocated!) ---
-  Active Allocs: 2
-  Active Bytes:  56 bytes (Freed back to Talc!)
-  Total Lifetime Allocs: 3
-Heartbeat tick: 1
-Heartbeat tick: 2
-...
-```
-
----
-
-## Technical Notes
-
-### PowerPC64 ELFv1 vs ELFv2 ABI
-PlayStation 3 CellOS (LV2) is natively built on the **PowerPC64 ELFv1 ABI**:
-- Function addresses in symbol tables point to **Function Descriptors** in `.opd` (24 bytes: `{entry_point, toc_base, env_pointer}`).
-- Register `r2` holds the `.TOC.` (Table of Contents) base pointer and is invariant across direct function calls.
-- In contrast, ELFv2 uses dual Global/Local Entry Points (GEP/LEP) which require modern linkers (Binutils 2.24+) to adjust direct branch offsets. Using pure ELFv1 ensures 100% compatibility with standard PS3 Binutils toolchains.
-
-### Syscall Stack Frames
-PS3 LV2 kernel syscalls expect a minimum 112-byte ABI linkage stack frame. All syscall wrappers create a temporary 128-byte frame (`stdu 1, -128(1)`) and preserve the TOC register `r2` into `r22` before executing `sc`.
 
 ---
 

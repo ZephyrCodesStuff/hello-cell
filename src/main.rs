@@ -3,6 +3,7 @@
 //! Provides core language runtime, heap allocation, TTY output, and LV2 syscalls.
 
 #![no_std]
+#![no_main]
 
 extern crate alloc;
 

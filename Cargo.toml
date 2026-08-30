@@ -6,10 +6,9 @@ name = "hello-cell"
 version = "0.1.0"
 edition = "2021"
 
-[lib]
-name = "hello_cell"
-crate-type = ["staticlib"]
-path = "src/lib.rs"
+[[bin]]
+name = "EBOOT"
+path = "src/main.rs"
 
 [dependencies]
 talc = { version = "5.1", default-features = false, features = ["counters"] }

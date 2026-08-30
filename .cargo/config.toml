@@ -5,4 +5,18 @@ target = "powerpc-unknown-cellos.json"
 json-target-spec = true
 
 [target.powerpc-unknown-cellos]
-rustflags = ["-C", "dwarf-version=2"]
+rustflags = [
+    "-C", "dwarf-version=2",
+    "-C", "link-arg=-m",
+    "-C", "link-arg=elf64ppc",
+    "-C", "link-arg=--image-base=0x10000",
+    "-C", "link-arg=--no-rosegment",
+    "-C", "link-arg=-z",
+    "-C", "link-arg=norelro",
+    "-C", "link-arg=-z",
+    "-C", "link-arg=separate-loadable-segments",
+    "-C", "link-arg=-Bstatic",
+    "-C", "link-arg=--no-gc-sections",
+    "-C", "link-arg=-e",
+    "-C", "link-arg=_start_code",
+]
