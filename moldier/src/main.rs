@@ -14,6 +14,10 @@ const ELF_MAGIC: &[u8; 4] = b"\x7fELF";
 const ELFCLASS64: u8 = 2;
 const ELFDATA2MSB: u8 = 2; // Big Endian
 const EM_PPC64: u16 = 21;  // 0x15
+const ELFOSABI_CELLLV2: u8 = 102; // 0x66
+
+const PT_SCE_PROC_PARAM: u32 = 0x6000_0001;
+const PT_SCE_PROC_PRX_PARAM: u32 = 0x6000_0002;
 
 #[allow(dead_code)]
 #[derive(Debug, Clone)]
@@ -42,6 +46,7 @@ struct ElfPatcher {
     shnum: u16,
     shstrndx: u16,
     sections: HashMap<String, SectionHeader>,
+    symbols: HashMap<String, u64>,
 }
 
 impl ElfPatcher {
@@ -135,6 +140,37 @@ impl ElfPatcher {
             });
         }
 
+        // Parse symbol table if present
+        let mut symbols = HashMap::new();
+        if let (Some(sym_sec), Some(str_sec)) = (sections.get(".symtab"), sections.get(".strtab")) {
+            let sym_start = sym_sec.offset as usize;
+            let sym_end = sym_start + (sym_sec.size as usize);
+            let str_start = str_sec.offset as usize;
+            let str_end = str_start + (str_sec.size as usize);
+
+            if sym_end <= data.len() && str_end <= data.len() {
+                let sym_data = &data[sym_start..sym_end];
+                let str_data = &data[str_start..str_end];
+                let ent_size = if sym_sec.entsize > 0 { sym_sec.entsize as usize } else { 24 };
+                let num_syms = sym_data.len() / ent_size;
+
+                for i in 0..num_syms {
+                    let s_off = i * ent_size;
+                    let st_name = u32::from_be_bytes(sym_data[s_off..s_off + 4].try_into().unwrap()) as usize;
+                    let st_value = u64::from_be_bytes(sym_data[s_off + 8..s_off + 16].try_into().unwrap());
+
+                    if st_name < str_data.len() {
+                        let name_bytes = &str_data[st_name..];
+                        let name_len = name_bytes.iter().position(|&b| b == 0).unwrap_or(name_bytes.len());
+                        let name = String::from_utf8_lossy(&name_bytes[..name_len]).into_owned();
+                        if !name.is_empty() {
+                            symbols.insert(name, st_value);
+                        }
+                    }
+                }
+            }
+        }
+
         Ok(Self {
             data,
             entry_point,
@@ -144,14 +180,111 @@ impl ElfPatcher {
             shnum,
             shstrndx,
             sections,
+            symbols,
         })
     }
 
-    /// Patch 1: Calculate FNID counts and resolve SPRX table pointers in `.lib.stub`
+    /// Fix 1: Set ELF OS/ABI to ELFOSABI_CELLLV2 (102 = 0x66)
+    pub fn patch_osabi(&mut self) {
+        self.data[7] = ELFOSABI_CELLLV2;
+        println!("  -> Set ELF OS/ABI to ELFOSABI_CELLLV2 (0x{:02X})", ELFOSABI_CELLLV2);
+    }
+
+    /// Fix 2: Sanitize PHDRs, strip non-PS3 GNU headers, set Sony flags, and inject PT_SCE headers
+    pub fn sanitize_and_inject_phdrs(&mut self) -> Result<usize, String> {
+        let phentsize = 56usize;
+        let phoff = self.phoff as usize;
+        let phnum = self.phnum as usize;
+
+        let mut valid_phdrs: Vec<[u8; 56]> = Vec::new();
+
+        // 1. Process existing PHDRs, keeping ONLY PT_LOAD (type 1)
+        for i in 0..phnum {
+            let offset = phoff + i * phentsize;
+            if offset + phentsize <= self.data.len() {
+                let p_type = u32::from_be_bytes(self.data[offset..offset + 4].try_into().unwrap());
+                if p_type == 1 {
+                    let mut ph_bytes = [0u8; 56];
+                    ph_bytes.copy_from_slice(&self.data[offset..offset + 56]);
+
+                    let p_flags = u32::from_be_bytes(ph_bytes[4..8].try_into().unwrap());
+                    // Sony PPU memory flags
+                    let new_flags = if (p_flags & 1) != 0 {
+                        0x0040_0005u32 // PF_PPU_EXEC | PF_R | PF_X
+                    } else if (p_flags & 2) != 0 {
+                        0x0060_0006u32 // PF_PPU_DATA | PF_R | PF_W
+                    } else {
+                        p_flags
+                    };
+                    ph_bytes[4..8].copy_from_slice(&new_flags.to_be_bytes());
+
+                    let p_vaddr = u64::from_be_bytes(ph_bytes[16..24].try_into().unwrap());
+                    let p_filesz = u64::from_be_bytes(ph_bytes[32..40].try_into().unwrap());
+                    println!("  -> Kept PT_LOAD segment (vaddr 0x{:X}, size 0x{:X}, flags 0x{:08X})", p_vaddr, p_filesz, new_flags);
+                    valid_phdrs.push(ph_bytes);
+                } else {
+                    println!("  -> Stripped non-PS3 header 0x{:08X}", p_type);
+                }
+            }
+        }
+
+        // 2. Inject PT_SCE_PROC_PARAM (0x60000001)
+        if let Some(param_sec) = self.sections.get(".sys_proc_param") {
+            let mut ph_bytes = [0u8; 56];
+            ph_bytes[0..4].copy_from_slice(&PT_SCE_PROC_PARAM.to_be_bytes());
+            ph_bytes[4..8].copy_from_slice(&0u32.to_be_bytes()); // p_flags = 0
+            ph_bytes[8..16].copy_from_slice(&param_sec.offset.to_be_bytes());
+            ph_bytes[16..24].copy_from_slice(&param_sec.addr.to_be_bytes());
+            ph_bytes[24..32].copy_from_slice(&param_sec.addr.to_be_bytes()); // p_paddr = p_vaddr
+            ph_bytes[32..40].copy_from_slice(&param_sec.size.to_be_bytes());
+            ph_bytes[40..48].copy_from_slice(&param_sec.size.to_be_bytes());
+            ph_bytes[48..56].copy_from_slice(&param_sec.addralign.max(8).to_be_bytes());
+
+            println!("  -> Injected PT_SCE_PROC_PARAM (0x{:08X}) at 0x{:X}", PT_SCE_PROC_PARAM, param_sec.addr);
+            valid_phdrs.push(ph_bytes);
+        }
+
+        // 3. Inject PT_SCE_PROC_PRX_PARAM (0x60000002)
+        if let Some(prx_sec) = self.sections.get(".sys_proc_prx_param") {
+            let mut ph_bytes = [0u8; 56];
+            ph_bytes[0..4].copy_from_slice(&PT_SCE_PROC_PRX_PARAM.to_be_bytes());
+            ph_bytes[4..8].copy_from_slice(&0u32.to_be_bytes()); // p_flags = 0
+            ph_bytes[8..16].copy_from_slice(&prx_sec.offset.to_be_bytes());
+            ph_bytes[16..24].copy_from_slice(&prx_sec.addr.to_be_bytes());
+            ph_bytes[24..32].copy_from_slice(&prx_sec.addr.to_be_bytes()); // p_paddr = p_vaddr
+            ph_bytes[32..40].copy_from_slice(&prx_sec.size.to_be_bytes());
+            ph_bytes[40..48].copy_from_slice(&prx_sec.size.to_be_bytes());
+            ph_bytes[48..56].copy_from_slice(&prx_sec.addralign.max(4).to_be_bytes());
+
+            println!("  -> Injected PT_SCE_PROC_PRX_PARAM (0x{:08X}) at 0x{:X}", PT_SCE_PROC_PRX_PARAM, prx_sec.addr);
+            valid_phdrs.push(ph_bytes);
+        }
+
+        // Overwrite PHDR table cleanly
+        for (i, ph) in valid_phdrs.iter().enumerate() {
+            let offset = phoff + i * phentsize;
+            self.data[offset..offset + 56].copy_from_slice(ph);
+        }
+
+        // Zero out any remaining old PHDR slots
+        for i in valid_phdrs.len()..phnum {
+            let offset = phoff + i * phentsize;
+            self.data[offset..offset + 56].fill(0);
+        }
+
+        // Update phnum in ELF header (bytes 56..58)
+        self.phnum = valid_phdrs.len() as u16;
+        self.data[56..58].copy_from_slice(&self.phnum.to_be_bytes());
+        println!("  -> Updated ELF e_phnum to {}", self.phnum);
+
+        Ok(valid_phdrs.len())
+    }
+
+    /// Fix 3: Calculate FNID counts and resolve SPRX table pointers in `.lib.stub`
     pub fn patch_lib_stubs(&mut self) -> Result<usize, String> {
-        let (stub_sec, fnid_sec) = match (self.sections.get(".lib.stub"), self.sections.get(".rodata.sceFNID")) {
-            (Some(s), Some(f)) => (s.clone(), f.clone()),
-            _ => return Ok(0), // No dynamic SPRX stubs in this binary
+        let stub_sec = match self.sections.get(".lib.stub") {
+            Some(s) => s.clone(),
+            None => return Ok(0), // No dynamic SPRX stubs in this binary
         };
 
         let stub_count = (stub_sec.size / 44) as usize;
@@ -159,79 +292,59 @@ impl ElfPatcher {
             return Ok(0);
         }
 
-        println!("[moldier] Found .lib.stub ({} entries) and .rodata.sceFNID", stub_count);
+        println!("[moldier] Found .lib.stub ({} entries, offset 0x{:X})", stub_count, stub_sec.offset);
 
-        let resident_sec = self.sections.get(".rodata.sceResident").cloned();
-        let fstub_sec = self.sections.get(".data.sceFStub")
-            .or_else(|| self.sections.get(".data.sceFStub.cellSysmodule"))
-            .cloned();
+        // Auto-resolve library pointers from symbol table
+        let known_libs: [(&str, &str, &str, &str, u16); 2] = [
+            ("cellSysmodule", "cellSysmodule_name", "cellSysmodule_fnid_table", "cellSysmodule_fstub_table", 3),
+            ("sys_net", "sys_net_name", "sys_net_fnid_table", "sys_net_fstub_table", 13),
+        ];
 
-        let mut stubs = Vec::new();
         for i in 0..stub_count {
             let offset = (stub_sec.offset as usize) + i * 44;
             if offset + 44 > self.data.len() {
                 return Err("Stub header entry exceeds file size".into());
             }
 
-            let fnid_ptr = u32::from_be_bytes(self.data[offset + 20..offset + 24].try_into().unwrap()) as u64;
-            stubs.push((i, fnid_ptr));
-        }
+            let mut name_ptr = u32::from_be_bytes(self.data[offset + 16..offset + 20].try_into().unwrap());
+            let mut fnid_ptr = u32::from_be_bytes(self.data[offset + 20..offset + 24].try_into().unwrap());
+            let mut fstub_ptr = u32::from_be_bytes(self.data[offset + 24..offset + 28].try_into().unwrap());
+            let mut num_imports = u16::from_be_bytes(self.data[offset + 6..offset + 8].try_into().unwrap());
 
-        // Check if pointers are zero (meaning we need to auto-bind tables from sections)
-        let needs_pointer_binding = stubs.iter().all(|(_, p)| *p == 0);
-
-        if needs_pointer_binding {
-            println!("  -> Auto-resolving SPRX library pointers from section tables...");
-            // Hardcoded table layouts for standard PSL1GHT libraries:
-            // Library 0: cellSysmodule (3 functions)
-            // Library 1: sys_net (13 functions)
-            let lib_configs = [
-                ("cellSysmodule", 0usize, 0usize, 0usize, 3u16),
-                ("sys_net", 14usize, 12usize, 24usize, 13u16),
-            ];
-
-            for (i, (_name, res_off, fnid_off, fstub_off, fnid_count)) in lib_configs.iter().take(stub_count).enumerate() {
-                let offset = (stub_sec.offset as usize) + i * 44;
-                let target_offset = offset + 6; // num_imports
-                self.data[target_offset..target_offset + 2].copy_from_slice(&fnid_count.to_be_bytes());
-
-                if let Some(ref res) = resident_sec {
-                    let name_ptr = (res.addr + *res_off as u64) as u32;
-                    self.data[offset + 16..offset + 20].copy_from_slice(&name_ptr.to_be_bytes());
-                }
-
-                let fnid_ptr = (fnid_sec.addr + *fnid_off as u64) as u32;
-                self.data[offset + 20..offset + 24].copy_from_slice(&fnid_ptr.to_be_bytes());
-
-                if let Some(ref fstub) = fstub_sec {
-                    let fstub_ptr = (fstub.addr + *fstub_off as u64) as u32;
-                    self.data[offset + 24..offset + 28].copy_from_slice(&fstub_ptr.to_be_bytes());
-                }
-
-                println!("  -> Library stub #{}: {} imported FNID functions, bound pointers successfully", i, fnid_count);
-            }
-        } else {
-            for (i, fnid_ptr) in &stubs {
-                let mut end = fnid_sec.addr + fnid_sec.size;
-                for (j, other_fnid) in &stubs {
-                    if i != j && *other_fnid >= *fnid_ptr && *other_fnid < end {
-                        end = *other_fnid;
+            if i < known_libs.len() {
+                let (lib_name, sym_name, sym_fnid, sym_fstub, default_count) = known_libs[i];
+                if name_ptr == 0 {
+                    if let Some(&val) = self.symbols.get(sym_name) {
+                        name_ptr = val as u32;
+                        self.data[offset + 16..offset + 20].copy_from_slice(&name_ptr.to_be_bytes());
                     }
                 }
+                if fnid_ptr == 0 {
+                    if let Some(&val) = self.symbols.get(sym_fnid) {
+                        fnid_ptr = val as u32;
+                        self.data[offset + 20..offset + 24].copy_from_slice(&fnid_ptr.to_be_bytes());
+                    }
+                }
+                if fstub_ptr == 0 {
+                    if let Some(&val) = self.symbols.get(sym_fstub) {
+                        fstub_ptr = val as u32;
+                        self.data[offset + 24..offset + 28].copy_from_slice(&fstub_ptr.to_be_bytes());
+                    }
+                }
+                if num_imports == 0 {
+                    num_imports = default_count;
+                    self.data[offset + 6..offset + 8].copy_from_slice(&num_imports.to_be_bytes());
+                }
 
-                let fnid_count = ((end - *fnid_ptr) / 4) as u16;
-                let target_offset = (stub_sec.offset as usize) + i * 44 + 6; // offset of `num_imports` (uint16)
-                let be_bytes = fnid_count.to_be_bytes();
-                self.data[target_offset..target_offset + 2].copy_from_slice(&be_bytes);
-
-                println!("  -> Library stub #{}: {} imported FNID functions patched", i, fnid_count);
+                println!("  -> Library stub #{}: bound '{}' (num_imports={}, name=0x{:08X}, fnid=0x{:08X}, fstub=0x{:08X})",
+                    i, lib_name, num_imports, name_ptr, fnid_ptr, fstub_ptr);
             }
         }
 
         Ok(stub_count)
     }
 
-    /// Patch 2: Pack OPD function descriptors for Sony LV2
+    /// Fix 4: Pack OPD function descriptors matching PSL1GHT sprxlinker
     pub fn patch_opd_descriptors(&mut self) -> Result<usize, String> {
         let opd_sec = match self.sections.get(".opd") {
             Some(s) => s.clone(),
@@ -244,6 +357,7 @@ impl ElfPatcher {
         }
 
         println!("[moldier] Found .opd section: {} function descriptors ({} bytes)", count, opd_sec.size);
+        let start_code_addr = self.symbols.get("_start_code").copied().unwrap_or(0);
 
         for i in 0..count {
             let offset = (opd_sec.offset as usize) + i * 24;
@@ -253,18 +367,34 @@ impl ElfPatcher {
 
             let func_addr = u64::from_be_bytes(self.data[offset..offset + 8].try_into().unwrap());
             let rtoc = u64::from_be_bytes(self.data[offset + 8..offset + 16].try_into().unwrap());
+            let is_entry_descriptor = (opd_sec.addr + i as u64 * 24) == self.entry_point
+                || (start_code_addr != 0 && func_addr == start_code_addr);
 
-            // Sony LV2 packed descriptor: (func_entry << 32) | (rtoc & 0xFFFFFFFF)
-            let packed = (func_addr << 32) | (rtoc & 0xFFFF_FFFF);
-            let packed_bytes = packed.to_be_bytes();
-            self.data[offset + 16..offset + 24].copy_from_slice(&packed_bytes);
+            if is_entry_descriptor {
+                // The PS3 kernel crt0 boots using 32-bit word loads (lwz r0, 0(r8); lwz r2, 4(r8)) on e_entry
+                let func_u32 = (func_addr & 0xFFFF_FFFF) as u32;
+                let rtoc_u32 = (rtoc & 0xFFFF_FFFF) as u32;
+                self.data[offset..offset + 4].copy_from_slice(&func_u32.to_be_bytes());
+                self.data[offset + 4..offset + 8].copy_from_slice(&rtoc_u32.to_be_bytes());
+                let packed = (func_addr << 32) | (rtoc & 0xFFFF_FFFF);
+                self.data[offset + 16..offset + 24].copy_from_slice(&packed.to_be_bytes());
+                println!("  -> OPD descriptor #{}: configured entry descriptor (func=0x{:08X}, rtoc=0x{:08X})", i, func_u32, rtoc_u32);
+            } else {
+                // PSL1GHT standard (Opd64 in linker.c) for all 64-bit Rust/C function pointer calls:
+                // offset +0  (func): 64-bit function entry address
+                // offset +8  (rtoc): 64-bit TOC (r2) base address
+                // offset +16 (data): (func << 32) | (rtoc & 0xFFFFFFFF)
+                let packed = (func_addr << 32) | (rtoc & 0xFFFF_FFFF);
+                let packed_bytes = packed.to_be_bytes();
+                self.data[offset + 16..offset + 24].copy_from_slice(&packed_bytes);
+            }
         }
 
-        println!("  -> Packed {} OPD descriptors with Sony LV2 format", count);
+        println!("  -> Packed {} OPD descriptors with PSL1GHT format", count);
         Ok(count)
     }
 
-    /// Patch 3: Update `.sys_proc_prx_param` boundary pointers if needed
+    /// Fix 6: Update `.sys_proc_prx_param` boundary pointers
     pub fn patch_prx_params(&mut self) -> Result<(), String> {
         let prx_sec = match self.sections.get(".sys_proc_prx_param") {
             Some(s) => s.clone(),
@@ -281,18 +411,18 @@ impl ElfPatcher {
         let libstub_start = self.sections.get(".lib.stub").map(|s| s.addr as u32).unwrap_or(0);
         let libstub_end = self.sections.get(".lib.stub").map(|s| (s.addr + s.size) as u32).unwrap_or(0);
 
-        // Update offsets +16, +20, +24, +28 in sys_proc_prx_param if they are 0
-        if u32::from_be_bytes(self.data[off + 16..off + 20].try_into().unwrap()) == 0 && libent_start != 0 {
-            self.data[off + 16..off + 20].copy_from_slice(&libent_start.to_be_bytes());
-            self.data[off + 20..off + 24].copy_from_slice(&libent_end.to_be_bytes());
-            println!("  -> Updated sys_proc_prx_param libent bounds: 0x{:08X} - 0x{:08X}", libent_start, libent_end);
-        }
+        // Offsets in sys_proc_prx_param:
+        // +16: libent_start
+        // +20: libent_end
+        // +24: libstub_start
+        // +28: libstub_end
+        self.data[off + 16..off + 20].copy_from_slice(&libent_start.to_be_bytes());
+        self.data[off + 20..off + 24].copy_from_slice(&libent_end.to_be_bytes());
+        self.data[off + 24..off + 28].copy_from_slice(&libstub_start.to_be_bytes());
+        self.data[off + 28..off + 32].copy_from_slice(&libstub_end.to_be_bytes());
 
-        if u32::from_be_bytes(self.data[off + 24..off + 28].try_into().unwrap()) == 0 && libstub_start != 0 {
-            self.data[off + 24..off + 28].copy_from_slice(&libstub_start.to_be_bytes());
-            self.data[off + 28..off + 32].copy_from_slice(&libstub_end.to_be_bytes());
-            println!("  -> Updated sys_proc_prx_param libstub bounds: 0x{:08X} - 0x{:08X}", libstub_start, libstub_end);
-        }
+        println!("  -> Updated sys_proc_prx_param bounds: libent 0x{:08X}-0x{:08X}, libstub 0x{:08X}-0x{:08X}",
+            libent_start, libent_end, libstub_start, libstub_end);
 
         Ok(())
     }
@@ -300,19 +430,24 @@ impl ElfPatcher {
     /// Validate PS3 ELF alignment and critical sections
     pub fn validate(&self) {
         println!("[moldier] Validation Report:");
+        println!("  • OS/ABI:      0x{:02X}", self.data[7]);
+        println!("  • PHDR Count:  {}", self.phnum);
         println!("  • Entry Point: 0x{:016X}", self.entry_point);
 
         if let Some(text) = self.sections.get(".text") {
-            println!("  • .text: 0x{:08X} (size 0x{:X})", text.addr, text.size);
+            println!("  • .text:               0x{:08X} (size 0x{:X})", text.addr, text.size);
         }
         if let Some(opd) = self.sections.get(".opd") {
-            println!("  • .opd:  0x{:08X} (size 0x{:X})", opd.addr, opd.size);
-        }
-        if let Some(toc) = self.sections.get(".toc") {
-            println!("  • .toc:  0x{:08X} (size 0x{:X})", toc.addr, toc.size);
+            println!("  • .opd:                0x{:08X} (size 0x{:X})", opd.addr, opd.size);
         }
         if let Some(param) = self.sections.get(".sys_proc_param") {
-            println!("  • .sys_proc_param: 0x{:08X} (size 0x{:X})", param.addr, param.size);
+            println!("  • .sys_proc_param:     0x{:08X} (size 0x{:X})", param.addr, param.size);
+        }
+        if let Some(prx) = self.sections.get(".sys_proc_prx_param") {
+            println!("  • .sys_proc_prx_param: 0x{:08X} (size 0x{:X})", prx.addr, prx.size);
+        }
+        if let Some(stub) = self.sections.get(".lib.stub") {
+            println!("  • .lib.stub:           0x{:08X} (size 0x{:X})", stub.addr, stub.size);
         }
     }
 
@@ -328,6 +463,8 @@ fn patch_elf_file(input: &Path, output: Option<&Path>) -> Result<(), String> {
     let bytes = fs::read(input).map_err(|e| format!("Failed to read input file: {}", e))?;
     let mut patcher = ElfPatcher::new(bytes)?;
 
+    patcher.patch_osabi();
+    patcher.sanitize_and_inject_phdrs()?;
     patcher.patch_lib_stubs()?;
     patcher.patch_opd_descriptors()?;
     patcher.patch_prx_params()?;
@@ -346,7 +483,7 @@ USAGE:
     moldier link [options...] -- <mold_args...>
 
 COMMANDS:
-    patch       Apply PS3 OPD and SPRX fixes to an existing ELF
+    patch       Apply PS3 OPD, PHDR and SPRX fixes to an existing ELF
     link        Invoke mold with PPC64 ELFv1 flags and patch output automatically
 
 EXAMPLES:
@@ -386,7 +523,6 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         other => {
-            // Treat as patch if first argument is a file path
             let input_path = PathBuf::from(other);
             if input_path.exists() {
                 if let Err(err) = patch_elf_file(&input_path, None) {
@@ -402,3 +538,4 @@ fn main() -> ExitCode {
         }
     }
 }
+

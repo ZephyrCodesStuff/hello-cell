@@ -16,7 +16,8 @@ function WinToWsl($path) {
 }
 
 # 1. Build the moldier patcher tool (Host target).
-cargo build -p moldier
+$HOST_TARGET = (rustc -vV | Select-String "host: " | ForEach-Object { $_.Line.Substring(6) }).Trim()
+cargo build -p moldier --target $HOST_TARGET
 if ($LASTEXITCODE -ne 0) { throw "moldier build failed" }
 
 # 2. Build the Rust staticlib (ELFv1 PPC64 BE).
@@ -28,14 +29,14 @@ $W_BUILD = WinToWsl((Resolve-Path $BUILD))
 $W_OUT   = "$W_BUILD/EBOOT.ELF"
 
 if (Get-Command "mold" -ErrorAction SilentlyContinue) {
-    mold -m elf64ppc --image-base 0x10000 -Bstatic -e _start_code --whole-archive "$BUILD/libhello_cell.a" --no-whole-archive -o "$BUILD/EBOOT.ELF"
+    mold -m elf64ppc --image-base 0x10000 --no-rosegment -z norelro -z separate-loadable-segments -Bstatic -e _start_code --whole-archive "$BUILD/libhello_cell.a" --no-whole-archive -o "$BUILD/EBOOT.ELF"
 } else {
-    wsl -d $WSL_DISTRO -e bash -lc "mold -m elf64ppc --image-base 0x10000 -Bstatic -e _start_code --whole-archive $W_BUILD/libhello_cell.a --no-whole-archive -o $W_OUT"
+    wsl -d $WSL_DISTRO -e bash -lc "mold -m elf64ppc --image-base 0x10000 --no-rosegment -z norelro -z separate-loadable-segments -Bstatic -e _start_code --whole-archive $W_BUILD/libhello_cell.a --no-whole-archive -o $W_OUT"
 }
 if ($LASTEXITCODE -ne 0) { throw "mold link failed" }
 
 # 4. Process ELF with moldier (packs Sony LV2 OPD descriptors, patches SPRX FNID counts, verifies ELF layout).
-cargo run -p moldier -- patch "$BUILD\EBOOT.ELF"
+cargo run -p moldier --target $HOST_TARGET -- patch "$BUILD\EBOOT.ELF"
 if ($LASTEXITCODE -ne 0) { throw "moldier patch failed" }
 
 # 5. Package the ELF into an EBOOT.BIN.

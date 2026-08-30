@@ -21,6 +21,9 @@ cargo +nightly build \
 echo "===> 3. Linking with mold (PPC64 ELFv1)..."
 mold -m elf64ppc \
     --image-base 0x10000 \
+    --no-rosegment \
+    -z norelro \
+    -z separate-loadable-segments \
     -Bstatic \
     -e _start_code \
     --whole-archive "$BUILD_DIR/libhello_cell.a" \
