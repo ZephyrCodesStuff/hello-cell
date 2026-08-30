@@ -40,6 +40,7 @@ hello-cell/
 ├── ps3.ld                   # GNU LD linker script with 64KB page alignment & .opd layout
 ├── sprxlinker.py            # ELF post-processor for PSL1GHT PRX structures
 ├── build.ps1                # Build, assemble, link, strip, and packaging pipeline
+├── build.sh                 # Ditto, but for Unix systems
 └── Cargo.toml               # Cargo package configuration
 ```
 
