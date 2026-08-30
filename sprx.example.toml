@@ -1,5 +1,5 @@
 # PlayStation 3 SPRX Import Definitions
-# Defines libraries, function exports, and their 32-bit FNIDs for automated assembly and linker binding.
+# Defines libraries, function imports, and their 32-bit FNIDs for automated assembly and linker binding.
 
 [libraries.cellSysmodule]
 module_id = 0x0009
