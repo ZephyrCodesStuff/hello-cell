@@ -18,7 +18,7 @@ sys_process_param:
     .long 0x00000000        # ppc_seg = SYS_PROCESS_SPAWN_PPC_SEG_PRX
 
 # -----------------------------------------------------------------------------
-# PRX Loader Parameters (Points to .lib.stub import table)
+# PRX Loader Parameters (Points to .lib.stub import table - resolved by moldier)
 # -----------------------------------------------------------------------------
 .section ".sys_proc_prx_param","a"
 .align 2
@@ -28,10 +28,10 @@ sys_proc_prx_param:
     .long 0x1b434cec
     .long 2
     .long 0
-    .long __libentstart
-    .long __libentend
-    .long __libstubstart
-    .long __libstubend
+    .long 0                 # __libentstart (resolved by moldier)
+    .long 0                 # __libentend   (resolved by moldier)
+    .long 0                 # __libstubstart (resolved by moldier)
+    .long 0                 # __libstubend   (resolved by moldier)
     .short 0x0101
     .short 0
     .long 0
@@ -40,8 +40,10 @@ sys_proc_prx_param:
 # Library Names
 # -----------------------------------------------------------------------------
 .section ".rodata.sceResident","a"
+.globl cellSysmodule_name
 cellSysmodule_name:
     .asciz "cellSysmodule"
+.globl sys_net_name
 sys_net_name:
     .asciz "sys_net"
 
@@ -51,11 +53,13 @@ sys_net_name:
 .section ".rodata.sceFNID","a"
 .align 2
 
+.globl cellSysmodule_fnid_table
 cellSysmodule_fnid_table:
     .int 0x32267A31   # sysModuleLoad
     .int 0x112A5EE9   # sysModuleUnload
     .int 0x5a59e258   # sysModuleIsLoaded
 
+.globl sys_net_fnid_table
 sys_net_fnid_table:
     .int 0x139a9e9b   # netInitializeNetworkEx
     .int 0xb68d5625   # netFinalizeNetwork
@@ -72,73 +76,92 @@ sys_net_fnid_table:
     .int 0x6db6e8cd   # netClose
 
 # -----------------------------------------------------------------------------
-# Function Pointer Slots (In .data.sceFStub: 4 bytes per function, initialized to trampoline)
-# At load time, the PS3 LV2 loader writes the address of the resolved runtime descriptor here.
+# Function Pointer Slots (In .data.sceFStub: initialized to trampoline OPDs)
 # -----------------------------------------------------------------------------
 .section ".data.sceFStub.cellSysmodule","aw"
-.align 2
+.align 3
+.globl cellSysmodule_fstub_table
 cellSysmodule_fstub_table:
+.globl sysModuleLoad_stub
 sysModuleLoad_stub:
-    .long __sysModuleLoad
+    .quad __sysModuleLoad
+.globl sysModuleUnload_stub
 sysModuleUnload_stub:
-    .long __sysModuleUnload
+    .quad __sysModuleUnload
+.globl sysModuleIsLoaded_stub
 sysModuleIsLoaded_stub:
-    .long __sysModuleIsLoaded
+    .quad __sysModuleIsLoaded
 
 .section ".data.sceFStub.sys_net","aw"
-.align 2
+.align 3
+.globl sys_net_fstub_table
 sys_net_fstub_table:
+.globl netInitializeNetworkEx_stub
 netInitializeNetworkEx_stub:
-    .long __netInitializeNetworkEx
+    .quad __netInitializeNetworkEx
+.globl netFinalizeNetwork_stub
 netFinalizeNetwork_stub:
-    .long __netFinalizeNetwork
+    .quad __netFinalizeNetwork
+.globl netSocket_stub
 netSocket_stub:
-    .long __netSocket
+    .quad __netSocket
+.globl netConnect_stub
 netConnect_stub:
-    .long __netConnect
+    .quad __netConnect
+.globl netBind_stub
 netBind_stub:
-    .long __netBind
+    .quad __netBind
+.globl netListen_stub
 netListen_stub:
-    .long __netListen
+    .quad __netListen
+.globl netAccept_stub
 netAccept_stub:
-    .long __netAccept
+    .quad __netAccept
+.globl netSend_stub
 netSend_stub:
-    .long __netSend
+    .quad __netSend
+.globl netSendTo_stub
 netSendTo_stub:
-    .long __netSendTo
+    .quad __netSendTo
+.globl netRecv_stub
 netRecv_stub:
-    .long __netRecv
+    .quad __netRecv
+.globl netRecvFrom_stub
 netRecvFrom_stub:
-    .long __netRecvFrom
+    .quad __netRecvFrom
+.globl netShutdown_stub
 netShutdown_stub:
-    .long __netShutdown
+    .quad __netShutdown
+.globl netClose_stub
 netClose_stub:
-    .long __netClose
+    .quad __netClose
 
 # -----------------------------------------------------------------------------
-# PRX Import Headers (Read by PS3 LV2 Kernel Loader)
+# PRX Import Headers (Read by PS3 LV2 Kernel Loader - patched by moldier)
 # -----------------------------------------------------------------------------
 .section ".lib.stub","aw"
 .align 2
 
+.globl cellSysmodule_prx_header
 cellSysmodule_prx_header:
     .int 0x2c000001
     .short 0x0009
-    .short 3          # 3 functions
+    .short 0          # num_imports (patched by moldier)
     .int 0, 0
-    .int cellSysmodule_name
-    .int cellSysmodule_fnid_table
-    .int cellSysmodule_fstub_table
+    .int 0            # cellSysmodule_name (patched by moldier)
+    .int 0            # cellSysmodule_fnid_table (patched by moldier)
+    .int 0            # cellSysmodule_fstub_table (patched by moldier)
     .int 0, 0, 0, 0
 
+.globl sys_net_prx_header
 sys_net_prx_header:
     .int 0x2c000001
     .short 0x0009
-    .short 13         # 13 functions
+    .short 0          # num_imports (patched by moldier)
     .int 0, 0
-    .int sys_net_name
-    .int sys_net_fnid_table
-    .int sys_net_fstub_table
+    .int 0            # sys_net_name (patched by moldier)
+    .int 0            # sys_net_fnid_table (patched by moldier)
+    .int 0            # sys_net_fstub_table (patched by moldier)
     .int 0, 0, 0, 0
 
 # -----------------------------------------------------------------------------
@@ -151,27 +174,28 @@ sys_net_prx_header:
 .align 2
 .globl __\name
 __\name:
-    mflr    r0
-    std     r0, 16(r1)
-    std     r2, 40(r1)
-    stdu    r1, -128(r1)
-    lis     r12, \name\()_stub@ha
-    lwz     r12, \name\()_stub@l(r12)   # Load pointer to runtime descriptor
-    lwz     r0, 0(r12)                  # Load resolved function entry address
-    lwz     r2, 4(r12)                  # Load resolved SPRX TOC base
-    mtctr   r0
-    bctrl                               # Call into SPRX!
-    addi    r1, r1, 128
-    ld      r2, 40(r1)                  # Restore our application TOC (r2)
-    ld      r0, 16(r1)
-    mtlr    r0
+    mflr    0
+    std     0, 16(1)
+    std     2, 40(1)
+    stdu    1, -128(1)
+    addis   12, 2, \name\()_stub@toc@ha
+    addi    12, 12, \name\()_stub@toc@l
+    ld      12, 0(12)                   # Load pointer to runtime descriptor
+    lwz     0, 0(12)                  # Load resolved function entry address
+    lwz     2, 4(12)                  # Load resolved SPRX TOC base
+    mtctr   0
+    bctrl                             # Call into SPRX!
+    addi    1, 1, 128
+    ld      2, 40(1)                  # Restore our application TOC (r2)
+    ld      0, 16(1)
+    mtlr    0
     blr
 
 .section ".opd","aw"
 .align 3
 .globl \name
 \name:
-    .quad __\name, .TOC.@tocbase, 0
+    .quad __\name, .TOC., 0
 .section ".sceStub.text","ax"
 .endm
 

@@ -1,2 +1,4 @@
 [tools]
+cmake = "latest"
 rust = "nightly"
+mold = "latest" # Only works on Linux as of 2026/08/30
