@@ -8,7 +8,7 @@
         <img src="https://img.shields.io/badge/linker-mold-blue.svg?style=flat-square">
     </a>
     <a href="LICENSE">
-        <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square">
+        <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat-square">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/platform-PlayStation%203%20(CellOS)-purple.svg?style=flat-square">
@@ -166,4 +166,8 @@ Debug symbols are preserved in `EBOOT.ELF`. You can inspect and debug binaries u
 
 ## License
 
-This project is licensed under **AGPL-3.0**. See [LICENSE](LICENSE) for details.
+See [LICENSE](LICENSE).
+
+### Contribution
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any additional terms or conditions.

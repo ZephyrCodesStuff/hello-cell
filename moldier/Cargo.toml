@@ -3,6 +3,7 @@ name = "moldier"
 version = "0.1.0"
 edition = "2021"
 description = "PlayStation 3 ELF post-linker and patcher for mold"
+license = "MIT OR Apache-2.0"
 
 [[bin]]
 name = "moldier"

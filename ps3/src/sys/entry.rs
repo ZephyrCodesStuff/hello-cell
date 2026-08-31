@@ -26,4 +26,4 @@ _start_code:
     "#
 );
 
-global_asm!(include_str!("sprx.s"));
+global_asm!(include_str!(concat!(env!("OUT_DIR"), "/sprx.s")));
