@@ -3,7 +3,7 @@
 //! Provides high-performance O(1) allocation and deallocation, backed by
 //! dynamic heap expansion via PS3 LV2 `sys_memory_allocate`.
 
-use crate::syscalls::{sys_memory_allocate, SYS_MEMORY_PAGE_SIZE_64K};
+use crate::sys::{sys_memory_allocate, SYS_MEMORY_PAGE_SIZE_64K};
 use core::alloc::Layout;
 use talc::base::binning::Binning;
 use talc::base::Talc;

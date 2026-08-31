@@ -1,10 +1,10 @@
 [build]
-target = "powerpc-unknown-cellos.json"
+target = "powerpc64-sony-ps3.json"
 
 [unstable]
 json-target-spec = true
 
-[target.powerpc-unknown-cellos]
+[target.powerpc64-sony-ps3]
 rustflags = [
     "-C", "dwarf-version=2",
     "-C", "link-arg=-m",

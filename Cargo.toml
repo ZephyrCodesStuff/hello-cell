@@ -1,18 +1,10 @@
 [workspace]
-members = [".", "moldier"]
-
-[package]
-name = "hello-cell"
-version = "0.1.0"
-edition = "2021"
-
-[[bin]]
-name = "EBOOT"
-path = "src/main.rs"
-
-[dependencies]
-talc = { version = "5.1", default-features = false, features = ["counters"] }
-lock_api = { version = "0.4", default-features = false }
+members = [
+    "ps3",
+    "examples/*",
+]
+exclude = ["moldier"]
+resolver = "2"
 
 [profile.dev]
 codegen-units = 1

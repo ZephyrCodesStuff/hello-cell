@@ -1,22 +1,39 @@
+param (
+    [string]$TargetExample = "hello-world"
+)
+
 $ErrorActionPreference = "Stop"
 
-$BUILD = "target/powerpc-unknown-cellos/debug"
+$ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+$RootDir = Split-Path -Parent $ScriptDir
+Set-Location $RootDir
+
+switch ($TargetExample) {
+    "hello-world" { $PackageName = "example-hello-world" }
+    "example-hello-world" { $PackageName = "example-hello-world" }
+    "http-server" { $PackageName = "example-http-server" }
+    "example-http-server" { $PackageName = "example-http-server" }
+    Default { $PackageName = $TargetExample }
+}
+
+$BUILD = "target/powerpc64-sony-ps3/debug"
 
 # 1. Build the moldier patcher tool (Host target).
 $HOST_TARGET = (rustc -vV | Select-String "host: " | ForEach-Object { $_.Line.Substring(6) }).Trim()
-cargo build -p moldier --target $HOST_TARGET
+cargo build --manifest-path moldier/Cargo.toml --target-dir target --target $HOST_TARGET
 if ($LASTEXITCODE -ne 0) { throw "moldier build failed" }
 
 # 2. Auto-generate SPRX assembly stubs from declarative sprx.toml.
-cargo run -p moldier --target $HOST_TARGET -- gen-stubs --config sprx.toml --output src/sprx.s
+$MOLDIER_BIN = "target/$HOST_TARGET/debug/moldier"
+& $MOLDIER_BIN gen-stubs --config ps3/sprx.toml --output ps3/src/sys/sprx.s
 if ($LASTEXITCODE -ne 0) { throw "SPRX stub generation failed" }
 
 # 3. Build & link the binary directly using mold via rustc!
-cargo +nightly build --target powerpc-unknown-cellos.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec -p hello-cell
+cargo +nightly build --target powerpc64-sony-ps3.json -Z unstable-options -Z build-std=core,alloc,compiler_builtins -Z json-target-spec -p $PackageName
 if ($LASTEXITCODE -ne 0) { throw "cargo build failed" }
 
 # 4. Process ELF with moldier (packs Sony LV2 OPD descriptors, dynamically binds SPRX headers, verifies ELF layout).
-cargo run -p moldier --target $HOST_TARGET -- patch "$BUILD\EBOOT.ELF"
+& $MOLDIER_BIN patch "$BUILD\EBOOT.ELF"
 if ($LASTEXITCODE -ne 0) { throw "moldier patch failed" }
 
 # 5. Package the ELF into an EBOOT.BIN.
@@ -30,5 +47,3 @@ if (Get-Command "make_fself.exe" -ErrorAction SilentlyContinue) {
 }
 
 Write-Host "Build complete with native mold + moldier: $ABS_BIN"
-
-

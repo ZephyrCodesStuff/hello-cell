@@ -1,4 +1,4 @@
-//! PS3 LV2 Kernel Entry Point
+//! PS3 LV2 Kernel Entry Point & Bootstrapping
 //!
 //! Handles low-level process bootstrapping and terminates the process
 //! via SYS_PROCESS_EXIT upon return from `rust_main`.
@@ -27,4 +27,3 @@ _start_code:
 );
 
 global_asm!(include_str!("sprx.s"));
-

@@ -1,16 +1,9 @@
-//! Safe wrappers for PlayStation 3 Level 2 (LV2) Kernel Syscalls.
+//! Low-level PlayStation 3 Level 2 (LV2) Kernel Syscalls.
 //!
 //! Every syscall preserves the TOC register (`r2`) and creates a standard
 //! 128-byte parameter/linkage stack frame.
 
 use core::arch::asm;
-
-// -----------------------------------------------------------------------------
-// Memory Flags & Page Constants
-// -----------------------------------------------------------------------------
-
-pub const SYS_MEMORY_PAGE_SIZE_64K: u64 = 0x200;
-pub const SYS_MEMORY_PAGE_SIZE_1M: u64 = 0x400;
 
 // -----------------------------------------------------------------------------
 // Low-Level Syscall Primitive & Variadic Macro
@@ -61,31 +54,31 @@ pub unsafe fn raw_syscall(
 #[macro_export]
 macro_rules! lv2_syscall {
     ($nr:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, 0, 0, 0, 0, 0, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, 0, 0, 0, 0, 0, 0, 0, 0)
     };
     ($nr:expr, $a1:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, 0, 0, 0, 0, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, 0, 0, 0, 0, 0, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, 0, 0, 0, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, 0, 0, 0, 0, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, 0, 0, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, 0, 0, 0, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, 0, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, 0, 0, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, 0, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, 0, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, 0, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, 0, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, $a7 as usize as u64, 0)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, $a7 as usize as u64, 0)
     };
     ($nr:expr, $a1:expr, $a2:expr, $a3:expr, $a4:expr, $a5:expr, $a6:expr, $a7:expr, $a8:expr) => {
-        $crate::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, $a7 as usize as u64, $a8 as usize as u64)
+        $crate::sys::syscalls::raw_syscall($nr as u64, $a1 as usize as u64, $a2 as usize as u64, $a3 as usize as u64, $a4 as usize as u64, $a5 as usize as u64, $a6 as usize as u64, $a7 as usize as u64, $a8 as usize as u64)
     };
 }
 
@@ -93,8 +86,6 @@ macro_rules! lv2_syscall {
 // Declarative Syscall Definition DSL
 // -----------------------------------------------------------------------------
 
-/// Defines syscall number constants and low-level typed functions
-/// from a single declarative source of truth.
 macro_rules! define_syscalls {
     (
         $(
@@ -115,7 +106,7 @@ macro_rules! define_syscalls {
             #[inline(always)]
             pub unsafe fn $name ( $( $arg : $arg_ty ),* ) $(-> $ret)? {
                 $crate::lv2_syscall!(
-                    $crate::syscalls::nr::$const_name
+                    $crate::sys::syscalls::nr::$const_name
                     $(, $arg )*
                 ) $(as $ret)?
             }
@@ -124,7 +115,7 @@ macro_rules! define_syscalls {
 }
 
 // -----------------------------------------------------------------------------
-// Syscall Table (Single Source of Truth)
+// Syscall Table
 // -----------------------------------------------------------------------------
 
 define_syscalls! {
@@ -193,7 +184,7 @@ define_syscalls! {
 }
 
 // -----------------------------------------------------------------------------
-// Ergonomic Rust Wrappers (Handling Strings, Buffers & Result Types)
+// Low-Level Syscall Helper Functions
 // -----------------------------------------------------------------------------
 
 /// Writes a string slice to the TTY debug console (stdout channel 0).
@@ -223,93 +214,12 @@ pub unsafe fn sys_memory_allocate(size: usize, flags: u64) -> Result<*mut u8, i3
 }
 
 /// Queries total and available user memory.
-///
-/// Returns `(total_bytes, available_bytes)` on success.
 pub unsafe fn sys_memory_get_user_memory_size() -> Result<(u32, u32), i32> {
     let mut mem_info: [u32; 2] = [0, 0];
     let ret = sys_memory_get_user_memory_size_raw(&mut mem_info);
 
     if ret == 0 {
         Ok((mem_info[0], mem_info[1]))
-    } else {
-        Err(ret)
-    }
-}
-
-/// Creates a memory container for PRX / system allocations.
-pub unsafe fn sys_memory_container_create(size: usize) -> Result<u32, i32> {
-    let mut container: u32 = 0;
-    let ret = sys_memory_container_create_raw(&mut container, size);
-
-    if ret == 0 {
-        Ok(container)
-    } else {
-        Err(ret)
-    }
-}
-
-/// Loads a PRX module into the process using a memory container.
-pub unsafe fn sys_prx_load_module_on_memcontainer(
-    path: &str,
-    container: u32,
-    flags: u64,
-) -> Result<i32, i32> {
-    let mut path_buf = [0u8; 256];
-    let len = path.len().min(255);
-    path_buf[..len].copy_from_slice(&path.as_bytes()[..len]);
-    path_buf[len] = 0;
-
-    let ret = sys_prx_load_module_on_memcontainer_raw(path_buf.as_ptr(), container, flags, 0);
-
-    if ret >= 0 {
-        Ok(ret)
-    } else {
-        Err(ret)
-    }
-}
-
-/// Loads a PRX module into the process from a path string.
-pub unsafe fn sys_prx_load_module(
-    path: &str,
-    flags: u64,
-) -> Result<i32, i32> {
-    let mut path_buf = [0u8; 256];
-    let len = path.len().min(255);
-    path_buf[..len].copy_from_slice(&path.as_bytes()[..len]);
-    path_buf[len] = 0;
-
-    let ret = sys_prx_load_module_raw(path_buf.as_ptr(), flags, 0);
-
-    if ret >= 0 {
-        Ok(ret)
-    } else {
-        Err(ret)
-    }
-}
-
-/// Starts an already loaded PRX module.
-pub unsafe fn sys_prx_start_module(prx_id: i32) -> Result<i32, i32> {
-    let mut modres: i32 = 0;
-    let ret = sys_prx_start_module_raw(prx_id, 0, 0, &mut modres, 0, 0);
-
-    if ret == 0 {
-        Ok(modres)
-    } else {
-        Err(ret)
-    }
-}
-
-/// Queries a module ID by name string.
-pub unsafe fn sys_prx_get_module_id_by_name(name: &str) -> Result<i32, i32> {
-    let mut name_buf = [0u8; 64];
-    let len = name.len().min(63);
-    name_buf[..len].copy_from_slice(&name.as_bytes()[..len]);
-    name_buf[len] = 0;
-
-    let ret = sys_prx_get_module_id_by_name_raw(name_buf.as_ptr(), 0, 0);
-
-    if ret >= 0 {
-        Ok(ret)
     } else {
         Err(ret)
     }

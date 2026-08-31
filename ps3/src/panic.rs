@@ -1,4 +1,4 @@
-//! Panic handling for PS3 barebones Rust.
+//! Panic handling for PS3 Rust.
 
 use core::panic::PanicInfo;
 

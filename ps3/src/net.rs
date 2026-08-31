@@ -2,61 +2,17 @@
 //!
 //! Implements native networking using FNID dynamic linking.
 
+extern crate alloc;
+
 use alloc::alloc::{alloc, dealloc};
 use core::alloc::Layout;
 
-// -----------------------------------------------------------------------------
-// Constants
-// -----------------------------------------------------------------------------
-pub const SYSMODULE_NET: i32 = 0x0000;
-pub const SYSMODULE_NETCTL: i32 = 0x0014;
-
-pub const AF_INET: u8 = 2;
-pub const SOCK_STREAM: i32 = 1;
-pub const SOCK_DGRAM: i32 = 2;
-pub const IPPROTO_TCP: i32 = 6;
-pub const IPPROTO_UDP: i32 = 17;
-pub const SHUT_RDWR: i32 = 2;
-
-pub const CELL_NET_CTL_STATE_DISCONNECTED: i32 = 0;
-pub const CELL_NET_CTL_STATE_CONNECTING: i32 = 1;
-pub const CELL_NET_CTL_STATE_IPOBTAINING: i32 = 2;
-pub const CELL_NET_CTL_STATE_IPOBTAINED: i32 = 3;
-
-pub const CELL_NET_CTL_INFO_IP_ADDRESS: i32 = 16;
-
-// -----------------------------------------------------------------------------
-// C-ABI Structures
-// -----------------------------------------------------------------------------
-#[repr(C)]
-pub struct NetInitParam {
-    pub memory: u32,
-    pub memory_size: u32,
-    pub flags: i32,
-}
-
-#[repr(C)]
-#[derive(Copy, Clone, Debug)]
-pub struct SockAddrIn {
-    pub sin_len: u8,
-    pub sin_family: u8,
-    pub sin_port: u16,
-    pub sin_addr: u32,
-    pub sin_zero: [u8; 8],
-}
-
-impl SockAddrIn {
-    pub fn new(ip: [u8; 4], port: u16) -> Self {
-        let sin_addr = u32::from_be_bytes(ip);
-        Self {
-            sin_len: core::mem::size_of::<Self>() as u8,
-            sin_family: AF_INET,
-            sin_port: port.to_be(),
-            sin_addr,
-            sin_zero: [0; 8],
-        }
-    }
-}
+pub use crate::sys::types::{
+    CellNetCtlInfo, NetInitParam, SockAddrIn, AF_INET, CELL_NET_CTL_INFO_IP_ADDRESS,
+    CELL_NET_CTL_STATE_CONNECTING, CELL_NET_CTL_STATE_DISCONNECTED,
+    CELL_NET_CTL_STATE_IPOBTAINED, CELL_NET_CTL_STATE_IPOBTAINING, IPPROTO_TCP, IPPROTO_UDP,
+    SHUT_RDWR, SOCK_DGRAM, SOCK_STREAM, SYSMODULE_NET, SYSMODULE_NETCTL,
+};
 
 #[repr(C)]
 pub struct SockAddr {
@@ -65,14 +21,8 @@ pub struct SockAddr {
     pub sa_data: [u8; 14],
 }
 
-#[repr(C)]
-pub union CellNetCtlInfo {
-    pub ip_address: [u8; 16],
-    pub raw: [u8; 512],
-}
-
 // -----------------------------------------------------------------------------
-// SPRX FFI Imports (Resolved via FNIDs in src/sprx.s)
+// SPRX FFI Imports (Resolved via FNIDs in sprx.s)
 // -----------------------------------------------------------------------------
 extern "C" {
     pub fn sysModuleLoad(id: i32) -> i32;
@@ -187,11 +137,11 @@ pub fn init() -> Result<(), i32> {
                 crate::println!(" [NET] Network connection active (State=IPObtained)!");
                 break;
             }
-            crate::syscalls::sys_timer_usleep(250_000); // 250ms
+            crate::sys::sys_timer_usleep(250_000); // 250ms
         }
 
         // 7. Obtain and display PS3 IP Address
-        let mut info = CellNetCtlInfo { raw: [0; 512] };
+        let mut info = CellNetCtlInfo { ip_address: [0; 16] };
         let info_res = cellNetCtlGetInfo(CELL_NET_CTL_INFO_IP_ADDRESS, &mut info);
         crate::println!(" [NET] cellNetCtlGetInfo result: {:#X}", info_res as u32);
         if info_res == 0 {
