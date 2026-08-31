@@ -8,7 +8,7 @@
         <img src="https://img.shields.io/badge/linker-mold-blue.svg?style=flat-square">
     </a>
     <a href="LICENSE">
-        <img src="https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg?style=flat-square">
+        <img src="https://img.shields.io/badge/license-AGPL--3.0-blue.svg?style=flat-square">
     </a>
     <a href="#">
         <img src="https://img.shields.io/badge/platform-PlayStation%203%20(CellOS)-purple.svg?style=flat-square">

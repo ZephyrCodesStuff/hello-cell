@@ -3,7 +3,7 @@ name = "ps3"
 version = "0.1.0"
 edition = "2021"
 description = "A Rust runtime and SDK for the Sony PlayStation 3 (Cell Broadband Engine)"
-license = "MIT OR Apache-2.0"
+license = "AGPL-3.0-only"
 
 [lib]
 crate-type = ["rlib"]
