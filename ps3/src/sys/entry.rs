@@ -1,29 +1,50 @@
-//! PS3 LV2 Kernel Entry Point & Bootstrapping
-//!
-//! Handles low-level process bootstrapping and terminates the process
-//! via SYS_PROCESS_EXIT upon return from `rust_main`.
+//! PS3 LV2 Process Bootstrapping & Termination Support
 
 use core::arch::global_asm;
 
-global_asm!(
-    r#"
-    .section ".text._start_code", "ax"
-    .globl _start_code
-    .type _start_code, @function
-_start_code:
-    # 1. Kernel loads r2 = .TOC. from _start descriptor
-    # 2. Call rust_main using standard ELFv1 ABI
-    bl      rust_main
-    nop
+/// Trait implemented by types that can be returned by `#[ps3::main]`.
+pub trait Termination {
+    fn report(self) -> i32;
+}
 
-    # 3. Terminate process via LV2 Syscall 3 (SYS_PROCESS_EXIT)
-    mr      3, 3
-    li      11, 3
-    sc      2
+impl Termination for () {
+    #[inline(always)]
+    fn report(self) -> i32 {
+        0
+    }
+}
 
-.halt:
-    b       .halt
-    "#
-);
+impl Termination for i32 {
+    #[inline(always)]
+    fn report(self) -> i32 {
+        self
+    }
+}
+
+impl Termination for u32 {
+    #[inline(always)]
+    fn report(self) -> i32 {
+        self as i32
+    }
+}
+
+impl Termination for ! {
+    #[inline(always)]
+    fn report(self) -> i32 {
+        self
+    }
+}
+
+impl<E: core::fmt::Debug> Termination for Result<(), E> {
+    fn report(self) -> i32 {
+        match self {
+            Ok(()) => 0,
+            Err(e) => {
+                crate::println!("Process terminated with error: {:?}", e);
+                1
+            }
+        }
+    }
+}
 
 global_asm!(include_str!(concat!(env!("OUT_DIR"), "/sprx.s")));

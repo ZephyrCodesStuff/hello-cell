@@ -59,17 +59,23 @@ fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str("# Auto-generated PlayStation 3 System & SPRX Stubs by ps3 build.rs\n\n");
 
     // 0. System Process & PRX Parameters
-    out.push_str(".section \".sys_proc_param\",\"a\"\n.align 3\n.globl sys_process_param\nsys_process_param:\n");
+    out.push_str(".section \".sys_proc_param\",\"aR\"\n.align 3\n.globl sys_process_param\nsys_process_param:\n");
     out.push_str("    .long 0x00000020        # size = 32 bytes\n");
     out.push_str("    .long 0x13bcc5f6        # magic = SYS_PROCESS_SPAWN_MAGIC\n");
     out.push_str("    .long 0x00009000        # version = SYS_PROCESS_SPAWN_VERSION_090\n");
     out.push_str("    .long 0x00192001        # sdk_version = SYS_PROCESS_SPAWN_FW_VERSION_192\n");
-    out.push_str(&format!("    .long {}              # priority\n", config.process.primary_prio));
-    out.push_str(&format!("    .long 0x{:08X}        # stack size\n", config.process.primary_stack_size));
+    out.push_str(&format!(
+        "    .long {}              # priority\n",
+        config.process.primary_prio
+    ));
+    out.push_str(&format!(
+        "    .long 0x{:08X}        # stack size\n",
+        config.process.primary_stack_size
+    ));
     out.push_str("    .long 0x00100000        # malloc pagesize = 1 MB (0x100000)\n");
     out.push_str("    .long 0x00000000        # ppc_seg = SYS_PROCESS_SPAWN_PPC_SEG_PRX\n\n");
 
-    out.push_str(".section \".sys_proc_prx_param\",\"a\"\n.align 2\n.globl sys_proc_prx_param\nsys_proc_prx_param:\n");
+    out.push_str(".section \".sys_proc_prx_param\",\"aR\"\n.align 2\n.globl sys_proc_prx_param\nsys_proc_prx_param:\n");
     out.push_str("    .long 0x00000028        # size = 40 bytes\n");
     out.push_str("    .long 0x1b434cec        # magic\n");
     out.push_str("    .long 0x00000002        # version\n");
@@ -87,36 +93,60 @@ fn generate_sprx_assembly(config: &SprxConfig) -> String {
     }
 
     // 1. Library Names (.rodata.sceResident)
-    out.push_str(".section \".rodata.sceResident\",\"a\"\n");
+    out.push_str(".section \".rodata.sceResident\",\"aR\"\n");
     for lib_name in config.libraries.keys() {
-        out.push_str(&format!(".globl {}_name\n{}_name:\n    .asciz \"{}\"\n", lib_name, lib_name, lib_name));
+        out.push_str(&format!(
+            ".globl {}_name\n{}_name:\n    .asciz \"{}\"\n",
+            lib_name, lib_name, lib_name
+        ));
     }
     out.push('\n');
 
     // 2. FNID Hash Tables (.rodata.sceFNID)
-    out.push_str(".section \".rodata.sceFNID\",\"a\"\n.align 2\n\n");
+    out.push_str(".section \".rodata.sceFNID\",\"aR\"\n.align 2\n\n");
     for (lib_name, lib) in &config.libraries {
-        out.push_str(&format!(".globl {}_fnid_table\n{}_fnid_table:\n", lib_name, lib_name));
+        out.push_str(&format!(
+            ".globl {}_fnid_table\n{}_fnid_table:\n",
+            lib_name, lib_name
+        ));
         for func in &lib.functions {
             out.push_str(&format!("    .int 0x{:08X}   # {}\n", func.fnid, func.name));
         }
-        out.push_str(&format!(".globl {}_fnid_table_end\n{}_fnid_table_end:\n\n", lib_name, lib_name));
+        out.push_str(&format!(
+            ".globl {}_fnid_table_end\n{}_fnid_table_end:\n\n",
+            lib_name, lib_name
+        ));
     }
 
     // 3. 32-bit Stub Slots (.data.sceFStub.<lib>)
     for (lib_name, lib) in &config.libraries {
-        out.push_str(&format!(".section \".data.sceFStub.{}\",\"aw\"\n.align 2\n", lib_name));
-        out.push_str(&format!(".globl {}_fstub_table\n{}_fstub_table:\n", lib_name, lib_name));
+        out.push_str(&format!(
+            ".section \".data.sceFStub.{}\",\"aw\"\n.align 2\n",
+            lib_name
+        ));
+        out.push_str(&format!(
+            ".globl {}_fstub_table\n{}_fstub_table:\n",
+            lib_name, lib_name
+        ));
         for func in &lib.functions {
-            out.push_str(&format!(".globl {}_stub\n{}_stub:\n    .int 0\n", func.name, func.name));
+            out.push_str(&format!(
+                ".globl {}_stub\n{}_stub:\n    .int 0\n",
+                func.name, func.name
+            ));
         }
-        out.push_str(&format!(".globl {}_fstub_table_end\n{}_fstub_table_end:\n\n", lib_name, lib_name));
+        out.push_str(&format!(
+            ".globl {}_fstub_table_end\n{}_fstub_table_end:\n\n",
+            lib_name, lib_name
+        ));
     }
 
     // 4. PRX Import Headers (.lib.stub)
-    out.push_str(".section \".lib.stub\",\"aw\"\n.align 2\n\n");
+    out.push_str(".section \".lib.stub\",\"awR\"\n.align 2\n\n");
     for (lib_name, lib) in &config.libraries {
-        out.push_str(&format!(".globl {}_prx_header\n{}_prx_header:\n", lib_name, lib_name));
+        out.push_str(&format!(
+            ".globl {}_prx_header\n{}_prx_header:\n",
+            lib_name, lib_name
+        ));
         out.push_str("    .int 0x2c000001\n");
         out.push_str(&format!("    .short 0x{:04x}\n", lib.module_id));
         out.push_str(&format!("    .short {}\n", lib.functions.len()));

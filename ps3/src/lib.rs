@@ -15,3 +15,6 @@ pub mod panic;
 pub mod sys;
 
 pub use allocator::{get_heap_stats, HeapStats};
+pub use sys::entry::Termination;
+
+pub use ps3_macros::main;

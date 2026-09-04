@@ -87,7 +87,7 @@ pub fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str(
         "# -----------------------------------------------------------------------------\n",
     );
-    out.push_str(".section \".sys_proc_param\",\"a\"\n.align 3\n.globl sys_process_param\nsys_process_param:\n");
+    out.push_str(".section \".sys_proc_param\",\"aR\"\n.align 3\n.globl sys_process_param\nsys_process_param:\n");
     out.push_str("    .long 0x00000020        # size = 32 bytes\n");
     out.push_str("    .long 0x13bcc5f6        # magic = SYS_PROCESS_SPAWN_MAGIC\n");
     out.push_str("    .long 0x00009000        # version = SYS_PROCESS_SPAWN_VERSION_090\n");
@@ -112,7 +112,7 @@ pub fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str(
         "# -----------------------------------------------------------------------------\n",
     );
-    out.push_str(".section \".sys_proc_prx_param\",\"a\"\n.align 2\n.globl sys_proc_prx_param\nsys_proc_prx_param:\n");
+    out.push_str(".section \".sys_proc_prx_param\",\"aR\"\n.align 2\n.globl sys_proc_prx_param\nsys_proc_prx_param:\n");
     out.push_str("    .long 0x00000028        # size = 40 bytes\n");
     out.push_str("    .long 0x1b434cec        # magic\n");
     out.push_str("    .long 0x00000002        # version\n");
@@ -133,7 +133,7 @@ pub fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str(
         "# -----------------------------------------------------------------------------\n",
     );
-    out.push_str(".section \".rodata.sceResident\",\"a\"\n");
+    out.push_str(".section \".rodata.sceResident\",\"aR\"\n");
     for lib_name in config.libraries.keys() {
         out.push_str(&format!(
             ".globl {}_name\n{}_name:\n    .asciz \"{}\"\n",
@@ -150,7 +150,7 @@ pub fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str(
         "# -----------------------------------------------------------------------------\n",
     );
-    out.push_str(".section \".rodata.sceFNID\",\"a\"\n.align 2\n\n");
+    out.push_str(".section \".rodata.sceFNID\",\"aR\"\n.align 2\n\n");
     for (lib_name, lib) in &config.libraries {
         out.push_str(&format!(
             ".globl {}_fnid_table\n{}_fnid_table:\n",
@@ -202,7 +202,7 @@ pub fn generate_sprx_assembly(config: &SprxConfig) -> String {
     out.push_str(
         "# -----------------------------------------------------------------------------\n",
     );
-    out.push_str(".section \".lib.stub\",\"aw\"\n.align 2\n\n");
+    out.push_str(".section \".lib.stub\",\"awR\"\n.align 2\n\n");
     for (lib_name, lib) in &config.libraries {
         out.push_str(&format!(
             ".globl {}_prx_header\n{}_prx_header:\n",
@@ -667,7 +667,7 @@ impl ElfPatcher {
             "[moldier] Found .opd section: {} function descriptors ({} bytes)",
             count, opd_sec.size
         );
-        let start_code_addr = self.symbols.get("_start_code").copied().unwrap_or(0);
+        let start_code_addr = self.symbols.get("_start").copied().unwrap_or(0);
 
         for i in 0..count {
             let offset = (opd_sec.offset as usize) + i * 24;

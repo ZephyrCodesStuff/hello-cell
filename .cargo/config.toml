@@ -1,22 +1,32 @@
 [build]
-target = "powerpc64-sony-ps3.json"
+target = "powerpc64-sony-ps3"
 
 [unstable]
-json-target-spec = true
+# json-target-spec = true
 
 [target.powerpc64-sony-ps3]
 rustflags = [
-    "-C", "dwarf-version=2",
-    "-C", "link-arg=-m",
-    "-C", "link-arg=elf64ppc",
+    # For more details, see below:
+    # https://github.com/rust-lang/rust/pull/162072/changes/2489df9e380abf396573e97b26488dbe13cbd3b1#diff-a521a56042465fe023ea6a6576fab770deca794be68cf0ec884d67254e68e65eR7
+
+    # We strictly need ELFv1 PPC64.
+    "-C", "link-arg=-m", "-C", "link-arg=elf64ppc",
     "-C", "link-arg=--image-base=0x10000",
+    "-C", "link-arg=-e", "-C", "link-arg=_start",
+    
+    # Fixes
     "-C", "link-arg=--no-rosegment",
-    "-C", "link-arg=-z",
-    "-C", "link-arg=norelro",
-    "-C", "link-arg=-z",
-    "-C", "link-arg=separate-loadable-segments",
+    "-C", "link-arg=-z", "-C", "link-arg=separate-loadable-segments",
+    "-C", "link-arg=-z", "-C", "link-arg=norelro",
     "-C", "link-arg=-Bstatic",
-    "-C", "link-arg=--no-gc-sections",
-    "-C", "link-arg=-e",
-    "-C", "link-arg=_start_code",
+
+    # The following are segments that might never be referenced by the code,
+    #  but are expected to exist by the PS3's loader.
+    "-C", "link-arg=-u", "-C", "link-arg=sys_process_param",
+    "-C", "link-arg=-u", "-C", "link-arg=sys_proc_prx_param",
+    "-C", "link-arg=--undefined-glob=*_prx_header",
+    "-C", "link-arg=--undefined-glob=*_fnid_table",
+    "-C", "link-arg=--undefined-glob=*_name",
+    "-C", "link-arg=--undefined-glob=*_fstub_table",
 ]
+

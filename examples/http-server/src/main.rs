@@ -9,8 +9,8 @@ use ps3::net;
 use ps3::println;
 use ps3::sys::syscalls;
 
-#[no_mangle]
-pub extern "C" fn rust_main() -> i32 {
+#[ps3::main]
+fn main() -> i32 {
     println!("========================================");
     println!(" PS3 HTTP Server via Rust SDK");
     println!("========================================");

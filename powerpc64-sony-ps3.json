@@ -10,13 +10,13 @@
     "abi": "elfv1",
     "executables": true,
     "exe-suffix": ".ELF",
-    "linker-flavor": "ld",
+    "linker-flavor": "gnu",
     "linker": "mold",
     "relocation-model": "static",
     "code-model": "small",
     "panic-strategy": "abort",
-    "disable-redzone": true,
+    "disable-redzone": false,
     "features": "+altivec",
-    "frame-pointer": "always",
+    "frame-pointer": "may-omit",
     "relax-elf-relocations": false
 }

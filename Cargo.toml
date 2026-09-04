@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "ps3",
+    "ps3-macros",
     "examples/*",
 ]
 exclude = ["moldier"]
