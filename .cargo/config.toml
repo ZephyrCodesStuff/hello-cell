@@ -1,8 +1,8 @@
 [build]
-target = "powerpc64-sony-ps3"
+target = "powerpc64-sony-ps3.json"
 
 [unstable]
-# json-target-spec = true
+json-target-spec = true
 
 [target.powerpc64-sony-ps3]
 rustflags = [
